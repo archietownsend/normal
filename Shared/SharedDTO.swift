@@ -158,16 +158,49 @@ nonisolated enum ScheduleWindow {
     }
 }
 
-nonisolated struct GroupUnblockExclusion {
+nonisolated struct ShieldExclusion {
     private(set) var selection = FamilyActivitySelection()
     private(set) var domains: Set<String> = []
 
-    init(unblocks: [TimedUnblockDTO], at date: Date) {
+    static func groupUnblocks(_ unblocks: [TimedUnblockDTO], at date: Date) -> ShieldExclusion {
+        var exclusion = ShieldExclusion()
         for unblock in unblocks where unblock.isGroupUnblock && unblock.endDate > date {
-            guard let unblocked = try? FamilyActivitySelection.fromData(unblock.selectionData) else { continue }
-            selection = selection.union(unblocked)
-            domains.formUnion(unblock.customDomains)
+            exclusion.add(unblock.selectionData, domains: unblock.customDomains)
         }
+        return exclusion
+    }
+
+    static func activeSchedules(
+        _ schedules: [ScheduleDTO],
+        shouldBlock: Bool,
+        at date: Date,
+        excluding excludedID: UUID,
+        calendar: Calendar = .current,
+        isEnabled: (ScheduleDTO) -> Bool
+    ) -> ShieldExclusion {
+        var exclusion = ShieldExclusion()
+        for schedule in schedules
+            where schedule.id != excludedID
+            && schedule.shouldBlock == shouldBlock
+            && isEnabled(schedule)
+            && schedule.isActive(at: date, calendar: calendar)
+        {
+            exclusion.add(schedule.selectionData, domains: schedule.customDomains)
+        }
+        return exclusion
+    }
+
+    func union(_ other: ShieldExclusion) -> ShieldExclusion {
+        var merged = self
+        merged.selection = selection.union(other.selection)
+        merged.domains.formUnion(other.domains)
+        return merged
+    }
+
+    private mutating func add(_ selectionData: Data, domains: [String]) {
+        guard let added = try? FamilyActivitySelection.fromData(selectionData) else { return }
+        selection = selection.union(added)
+        self.domains.formUnion(domains)
     }
 
     func applied(to selection: FamilyActivitySelection) -> FamilyActivitySelection {
