@@ -205,6 +205,28 @@ struct ScheduleServiceTests {
         #expect(store.isScheduleOverrideActive())
     }
 
+    @Test func activeScheduleLeavesActiveGroupUnblockAppsUnblocked() throws {
+        let (service, _, store) = makeService()
+        let screenTime = FakeScreenTimeService()
+        store.customDomainsEnabled = true
+        store.timedUnblocks = try [TimedUnblockDTO(
+            id: UUID().uuidString,
+            selectionData: TokenFixtures.selection(apps: [2]).toData(),
+            endDate: .now.addingTimeInterval(.hours(1)),
+            activityName: "timedUnblock_group",
+            isGroupUnblock: true,
+            customDomains: ["b.com"]
+        )]
+        let schedule = activeNowSchedule()
+        schedule.selection = TokenFixtures.selection(apps: [1, 2])
+        schedule.customDomains = ["a.com", "b.com"]
+
+        try service.sync(schedule, screenTimeService: screenTime)
+
+        #expect(screenTime.addToShieldsSelection?.applicationTokens == [TokenFixtures.app(1)])
+        #expect(screenTime.addToShieldsCustomDomains == ["a.com"])
+    }
+
     @Test func setScheduleOverrideWritesFlag() {
         let (service, _, store) = makeService()
 

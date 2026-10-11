@@ -62,14 +62,6 @@ extension FamilyActivitySelection {
         }
     }
 
-    func subtracting(_ other: FamilyActivitySelection) -> FamilyActivitySelection {
-        var result = self
-        result.applicationTokens.subtract(other.applicationTokens)
-        result.webDomainTokens.subtract(other.webDomainTokens)
-        result.categoryTokens.subtract(other.categoryTokens)
-        return result
-    }
-
     func intersection(_ other: FamilyActivitySelection) -> FamilyActivitySelection {
         var result = self
         result.applicationTokens.formIntersection(other.applicationTokens)
