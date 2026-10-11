@@ -106,7 +106,11 @@ final class ScheduleService {
         let domains = effectiveDomains(schedule)
         if schedule.shouldBlock {
             guard !sharedStore.suppressesSchedule(windowStart: windowStart) else { return }
-            screenTimeService.addToShields(selection: schedule.selection, customDomains: domains)
+            let exclusion = GroupUnblockExclusion(unblocks: sharedStore.loadTimedUnblocks(), at: .now)
+            screenTimeService.addToShields(
+                selection: exclusion.applied(to: schedule.selection),
+                customDomains: exclusion.applied(to: domains)
+            )
         } else {
             screenTimeService.removeFromShields(selection: schedule.selection, customDomains: domains)
         }

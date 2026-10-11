@@ -121,6 +121,14 @@ extension FamilyActivitySelection {
         merged.categoryTokens.formUnion(other.categoryTokens)
         return merged
     }
+
+    func subtracting(_ other: FamilyActivitySelection) -> FamilyActivitySelection {
+        var result = self
+        result.applicationTokens.subtract(other.applicationTokens)
+        result.webDomainTokens.subtract(other.webDomainTokens)
+        result.categoryTokens.subtract(other.categoryTokens)
+        return result
+    }
 }
 
 nonisolated enum ScheduleWindow {
@@ -147,5 +155,26 @@ nonisolated enum ScheduleWindow {
             }
         }
         return nil
+    }
+}
+
+nonisolated struct GroupUnblockExclusion {
+    private(set) var selection = FamilyActivitySelection()
+    private(set) var domains: Set<String> = []
+
+    init(unblocks: [TimedUnblockDTO], at date: Date) {
+        for unblock in unblocks where unblock.isGroupUnblock && unblock.endDate > date {
+            guard let unblocked = try? FamilyActivitySelection.fromData(unblock.selectionData) else { continue }
+            selection = selection.union(unblocked)
+            domains.formUnion(unblock.customDomains)
+        }
+    }
+
+    func applied(to selection: FamilyActivitySelection) -> FamilyActivitySelection {
+        selection.subtracting(self.selection)
+    }
+
+    func applied(to domains: [String]) -> [String] {
+        domains.filter { !self.domains.contains($0) }
     }
 }
