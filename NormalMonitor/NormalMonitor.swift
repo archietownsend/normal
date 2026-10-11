@@ -121,19 +121,32 @@ final class NormalMonitor: DeviceActivityMonitor {
         else { return }
 
         let domains = gatedDomains(schedule.customDomains)
+        let stillActive = otherActiveSchedules(like: schedule)
         if schedule.shouldBlock {
-            store.subtractShields(with: selection)
-            store.subtractFilterDomains(domains)
+            store.subtractShields(with: stillActive.applied(to: selection))
+            store.subtractFilterDomains(stillActive.applied(to: domains))
         } else {
             guard !sharedStore.isUnblockAllInEffect() else { return }
-            let exclusion = activeGroupUnblockExclusion()
+            let exclusion = activeGroupUnblockExclusion().union(stillActive)
             store.unionShields(with: exclusion.applied(to: selection))
             store.unionFilterDomains(exclusion.applied(to: domains))
         }
     }
 
-    private func activeGroupUnblockExclusion() -> GroupUnblockExclusion {
-        GroupUnblockExclusion(unblocks: sharedStore.loadTimedUnblocks(), at: .now)
+    private func activeGroupUnblockExclusion() -> ShieldExclusion {
+        .groupUnblocks(sharedStore.loadTimedUnblocks(), at: .now)
+    }
+
+    private func otherActiveSchedules(like schedule: ScheduleDTO) -> ShieldExclusion {
+        let monitored = Set(DeviceActivityCenter().activities.map(\.rawValue))
+        return .activeSchedules(
+            sharedStore.loadSchedules(),
+            shouldBlock: schedule.shouldBlock,
+            at: .now,
+            excluding: schedule.id
+        ) { other in
+            monitored.contains(SharedConstants.scheduleActivityName(for: other.id))
+        }
     }
 
     private func gatedDomains(_ domains: [String]) -> [String] {
