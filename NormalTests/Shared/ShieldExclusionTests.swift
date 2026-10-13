@@ -122,4 +122,19 @@ struct ShieldExclusionTests {
         let remaining = groups.union(schedules).applied(to: TokenFixtures.selection(apps: [1, 2, 3]))
         #expect(remaining.applicationTokens == [TokenFixtures.app(3)])
     }
+
+    @Test func withoutExclusionIncludesEveryActiveScheduleOfKind() throws {
+        let lunch = try schedule(apps: [1], domains: ["a.com"], shouldBlock: false)
+        let work = try schedule(apps: [2])
+
+        let allowing = ShieldExclusion.activeSchedules(
+            [lunch, work],
+            shouldBlock: false,
+            at: noonWednesday,
+            calendar: cal
+        ) { _ in true }
+
+        #expect(allowing.applied(to: TokenFixtures.selection(apps: [1, 2])).applicationTokens == [TokenFixtures.app(2)])
+        #expect(allowing.applied(to: ["a.com", "b.com"]) == ["b.com"])
+    }
 }
