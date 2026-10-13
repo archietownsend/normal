@@ -75,16 +75,17 @@ final class NormalMonitor: DeviceActivityMonitor {
         else { return }
 
         let domains = gatedDomains(dto.customDomains)
+        let allowing = activeSchedules(shouldBlock: false)
         if dto.isGroupUnblock {
             guard !sharedStore.isMainTimedUnblockActive() else {
                 sharedStore.removeTimedUnblock(id: dto.id)
                 return
             }
-            store.unionShields(with: selection)
-            store.unionFilterDomains(domains)
+            store.unionShields(with: allowing.applied(to: selection))
+            store.unionFilterDomains(allowing.applied(to: domains))
         } else {
-            store.replaceShields(with: selection)
-            store.replaceFilterDomains(domains)
+            store.replaceShields(with: allowing.applied(to: selection))
+            store.replaceFilterDomains(allowing.applied(to: domains))
             if dto.blockAllPreventsAppDelete == true {
                 store.application.denyAppRemoval = true
             }
@@ -121,7 +122,7 @@ final class NormalMonitor: DeviceActivityMonitor {
         else { return }
 
         let domains = gatedDomains(schedule.customDomains)
-        let stillActive = otherActiveSchedules(like: schedule)
+        let stillActive = activeSchedules(shouldBlock: schedule.shouldBlock, excluding: schedule.id)
         if schedule.shouldBlock {
             store.subtractShields(with: stillActive.applied(to: selection))
             store.subtractFilterDomains(stillActive.applied(to: domains))
@@ -137,15 +138,15 @@ final class NormalMonitor: DeviceActivityMonitor {
         .groupUnblocks(sharedStore.loadTimedUnblocks(), at: .now)
     }
 
-    private func otherActiveSchedules(like schedule: ScheduleDTO) -> ShieldExclusion {
+    private func activeSchedules(shouldBlock: Bool, excluding excludedID: UUID? = nil) -> ShieldExclusion {
         let monitored = Set(DeviceActivityCenter().activities.map(\.rawValue))
         return .activeSchedules(
             sharedStore.loadSchedules(),
-            shouldBlock: schedule.shouldBlock,
+            shouldBlock: shouldBlock,
             at: .now,
-            excluding: schedule.id
-        ) { other in
-            monitored.contains(SharedConstants.scheduleActivityName(for: other.id))
+            excluding: excludedID
+        ) { schedule in
+            monitored.contains(SharedConstants.scheduleActivityName(for: schedule.id))
         }
     }
 

@@ -174,7 +174,7 @@ nonisolated struct ShieldExclusion {
         _ schedules: [ScheduleDTO],
         shouldBlock: Bool,
         at date: Date,
-        excluding excludedID: UUID,
+        excluding excludedID: UUID? = nil,
         calendar: Calendar = .current,
         isEnabled: (ScheduleDTO) -> Bool
     ) -> ShieldExclusion {
