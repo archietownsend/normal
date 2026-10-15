@@ -1,3 +1,4 @@
+import ActivityKit
 @testable import Normal
 import Testing
 
@@ -46,5 +47,12 @@ struct LiveActivityPlanTests {
     @Test func emptyOnBothSidesIsNoOp() {
         let plan = LiveActivityPlan(activeIDs: [], runningIDs: [])
         #expect(plan.toStart.isEmpty && plan.toUpdate.isEmpty && plan.toEnd.isEmpty)
+    }
+
+    @Test func systemEndedActivitiesAreNotTreatedAsRunning() {
+        #expect(LiveActivityManager.isRunning(.active))
+        #expect(LiveActivityManager.isRunning(.stale))
+        #expect(!LiveActivityManager.isRunning(.ended))
+        #expect(!LiveActivityManager.isRunning(.dismissed))
     }
 }

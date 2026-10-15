@@ -31,7 +31,11 @@ enum LiveActivityManager {
     static func reconcile(active: [String: Date], titles: [String: String], startDates: [String: Date] = [:]) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
-        let running = Activity<TimedUnblockActivityAttributes>.activities
+        let all = Activity<TimedUnblockActivityAttributes>.activities
+        for activity in all where !isRunning(activity.activityState) {
+            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        }
+        let running = all.filter { isRunning($0.activityState) }
         let runningByID = Dictionary(
             running.map { ($0.attributes.unblockID, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -56,6 +60,15 @@ enum LiveActivityManager {
                 startDate: startDates[id] ?? .now
             )
             _ = try? Activity.request(attributes: attributes, content: content(endingAt: endDate))
+        }
+    }
+
+    static func isRunning(_ state: ActivityState) -> Bool {
+        switch state {
+        case .ended, .dismissed:
+            false
+        default:
+            true
         }
     }
 
