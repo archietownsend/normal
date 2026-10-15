@@ -2,7 +2,7 @@ import FamilyControls
 import Foundation
 import ManagedSettings
 
-enum TokenFixtures {
+nonisolated enum TokenFixtures {
     static func app(_ id: UInt8) -> ApplicationToken {
         decode(id)
     }
