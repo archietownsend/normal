@@ -1,7 +1,7 @@
 import FamilyControls
 import Foundation
 
-struct TimedUnblockDTO: Codable, Sendable, Identifiable {
+nonisolated struct TimedUnblockDTO: Codable, Sendable, Identifiable {
     let id: String
     let selectionData: Data
     let endDate: Date
@@ -37,7 +37,7 @@ struct TimedUnblockDTO: Codable, Sendable, Identifiable {
     }
 }
 
-struct ScheduleDTO: Codable, Sendable, Identifiable {
+nonisolated struct ScheduleDTO: Codable, Sendable, Identifiable {
     let id: UUID
     let name: String
     let selectionData: Data
@@ -78,7 +78,7 @@ struct ScheduleDTO: Codable, Sendable, Identifiable {
     }
 }
 
-extension ScheduleDTO {
+nonisolated extension ScheduleDTO {
     var wrapsPastMidnight: Bool {
         startHour * 60 + startMinute + durationMinutes >= 24 * 60
     }
@@ -105,7 +105,7 @@ extension ScheduleDTO {
     }
 }
 
-extension FamilyActivitySelection {
+nonisolated extension FamilyActivitySelection {
     func toData() throws -> Data {
         try PropertyListEncoder().encode(self)
     }

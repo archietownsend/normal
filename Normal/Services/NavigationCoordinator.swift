@@ -70,6 +70,10 @@ final class NavigationCoordinator {
     }
 }
 
+extension NavigationCoordinator {
+    static let fallback = NavigationCoordinator()
+}
+
 extension EnvironmentValues {
-    @Entry var navigationCoordinator: NavigationCoordinator = .init()
+    @Entry var navigationCoordinator: NavigationCoordinator = .fallback
 }
