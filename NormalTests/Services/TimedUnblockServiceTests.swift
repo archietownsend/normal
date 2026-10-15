@@ -61,6 +61,54 @@ struct TimedUnblockServiceTests {
         #expect(service.isGroupUnblockActive(groupId: groupId))
     }
 
+    private struct RegistrationFailed: Error {}
+
+    @Test func startMainRegistrationFailureLeavesShieldsAndGroupUnblocks() throws {
+        let (service, activity, store) = makeService()
+        let screenTime = FakeScreenTimeService()
+        let groupId = UUID()
+        try service.startGroup(
+            duration: .fifteenMinutes,
+            groupId: groupId,
+            selection: FamilyActivitySelection(),
+            screenTimeService: screenTime
+        )
+        activity.startError = RegistrationFailed()
+
+        #expect(throws: RegistrationFailed.self) {
+            try service.startMain(
+                duration: .fifteenMinutes,
+                selection: FamilyActivitySelection(),
+                screenTimeService: screenTime
+            )
+        }
+
+        #expect(!screenTime.removeShieldOnAllCalled)
+        #expect(!service.isMainUnblockActive)
+        #expect(service.isGroupUnblockActive(groupId: groupId))
+        #expect(store.timedUnblocks.map(\.id) == [groupId.uuidString])
+    }
+
+    @Test func startGroupRegistrationFailureLeavesShields() {
+        let (service, activity, store) = makeService()
+        let screenTime = FakeScreenTimeService()
+        let groupId = UUID()
+        activity.startError = RegistrationFailed()
+
+        #expect(throws: RegistrationFailed.self) {
+            try service.startGroup(
+                duration: .fifteenMinutes,
+                groupId: groupId,
+                selection: FamilyActivitySelection(),
+                screenTimeService: screenTime
+            )
+        }
+
+        #expect(!screenTime.removeFromShieldsCalled)
+        #expect(!service.isGroupUnblockActive(groupId: groupId))
+        #expect(store.timedUnblocks.isEmpty)
+    }
+
     @Test func customDurationSetsEndDateAndPersistsStartDate() throws {
         let (service, _, store) = makeService()
         let custom = try #require(TimedUnblockDuration(validating: 5700))

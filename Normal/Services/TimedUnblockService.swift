@@ -59,12 +59,9 @@ final class TimedUnblockService {
     ) throws {
         let activityName = SharedConstants.mainTimedUnblockActivityName
         cancelMonitoring(activityName: activityName)
-        cancelAllGroupUnblocks()
 
         let start = Date.now
         let endDate = start.addingTimeInterval(duration.timeInterval)
-        screenTimeService.removeShieldOnAll(blockAllPreventsAppDelete: blockAllPreventsAppDelete)
-        sharedStore.setScheduleOverrideActive(false)
         try scheduleActivity(name: activityName, start: start, endDate: endDate)
 
         try persist(
@@ -77,6 +74,10 @@ final class TimedUnblockService {
             isGroupUnblock: false,
             blockAllPreventsAppDelete: blockAllPreventsAppDelete
         )
+
+        cancelAllGroupUnblocks()
+        screenTimeService.removeShieldOnAll(blockAllPreventsAppDelete: blockAllPreventsAppDelete)
+        sharedStore.setScheduleOverrideActive(false)
     }
 
     func startGroup(
@@ -92,7 +93,6 @@ final class TimedUnblockService {
 
         let start = Date.now
         let endDate = start.addingTimeInterval(duration.timeInterval)
-        screenTimeService.removeFromShields(selection: selection, customDomains: customDomains)
         try scheduleActivity(name: activityName, start: start, endDate: endDate)
 
         try persist(
@@ -104,6 +104,8 @@ final class TimedUnblockService {
             activityName: activityName,
             isGroupUnblock: true
         )
+
+        screenTimeService.removeFromShields(selection: selection, customDomains: customDomains)
     }
 
     func cancelMain(
