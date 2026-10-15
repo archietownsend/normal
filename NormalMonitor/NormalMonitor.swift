@@ -12,6 +12,7 @@ final class NormalMonitor: DeviceActivityMonitor {
     private static let scheduleStartToleranceSeconds: TimeInterval = 60
 
     override func intervalDidStart(for activity: DeviceActivityName) {
+        reblockExpiredUnblocks()
         let name = activity.rawValue
         if name == SharedConstants.usageLimitsActivityName {
             sharedStore.resetUsageDayIfStale()
@@ -23,6 +24,7 @@ final class NormalMonitor: DeviceActivityMonitor {
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
+        reblockExpiredUnblocks()
         let name = activity.rawValue
         if name.hasPrefix("timedUnblock_") {
             handleTimedUnblockExpired(activityName: name)
@@ -35,6 +37,7 @@ final class NormalMonitor: DeviceActivityMonitor {
         _ event: DeviceActivityEvent.Name,
         activity _: DeviceActivityName
     ) {
+        reblockExpiredUnblocks()
         guard let limit = credibleUsageLimit(eventName: event.rawValue, minutes: \.minutesPerDay) else { return }
         sharedStore.recordUsageState(.reached, for: limit.id)
         limitStore.syncDailyLimits(from: sharedStore)
@@ -44,6 +47,7 @@ final class NormalMonitor: DeviceActivityMonitor {
         _ event: DeviceActivityEvent.Name,
         activity _: DeviceActivityName
     ) {
+        reblockExpiredUnblocks()
         guard let limit = credibleUsageLimit(
             eventName: event.rawValue,
             minutes: { $0.minutesPerDay - SharedConstants.usageLimitWarningMinutes }
@@ -69,10 +73,20 @@ final class NormalMonitor: DeviceActivityMonitor {
         return limit
     }
 
+    private func reblockExpiredUnblocks() {
+        let now = Date.now
+        for dto in sharedStore.loadTimedUnblocks() where dto.endDate <= now {
+            reblock(dto)
+        }
+    }
+
     private func handleTimedUnblockExpired(activityName: String) {
-        guard let dto = sharedStore.findTimedUnblock(activityName: activityName),
-              let selection = try? FamilyActivitySelection.fromData(dto.selectionData)
-        else { return }
+        guard let dto = sharedStore.findTimedUnblock(activityName: activityName) else { return }
+        reblock(dto)
+    }
+
+    private func reblock(_ dto: TimedUnblockDTO) {
+        guard let selection = try? FamilyActivitySelection.fromData(dto.selectionData) else { return }
 
         let domains = gatedDomains(dto.customDomains)
         let allowing = activeSchedules(shouldBlock: false)

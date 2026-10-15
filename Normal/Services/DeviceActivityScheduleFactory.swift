@@ -20,6 +20,14 @@ enum DeviceActivityScheduleFactory {
         )
     }
 
+    static func heartbeat() -> DeviceActivitySchedule {
+        DeviceActivitySchedule(
+            intervalStart: DateComponents(minute: 0, second: 0),
+            intervalEnd: DateComponents(minute: 30, second: 0),
+            repeats: true
+        )
+    }
+
     static func daily(resetMinutes: Int, warningMinutes: Int) -> DeviceActivitySchedule {
         let startSeconds = resetMinutes * 60
         let endSeconds = (startSeconds - 1 + 86400) % 86400

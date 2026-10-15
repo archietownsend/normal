@@ -32,6 +32,8 @@ nonisolated enum SharedConstants {
 
     static let usageLimitsActivityName = "usageLimits_daily"
 
+    static let reblockHeartbeatActivityName = "reblockHeartbeat"
+
     static let usageLimitWarningMinutes = 3
 
     private static let usageEventPrefix = "usage_"
