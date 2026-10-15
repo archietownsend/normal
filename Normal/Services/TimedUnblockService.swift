@@ -271,6 +271,23 @@ final class TimedUnblockService {
             during: schedule,
             events: [:]
         )
+        startHeartbeat()
+    }
+
+    private func startHeartbeat() {
+        try? activityCenter.startMonitoring(
+            DeviceActivityName(SharedConstants.reblockHeartbeatActivityName),
+            during: DeviceActivityScheduleFactory.heartbeat(),
+            events: [:]
+        )
+    }
+
+    private func syncHeartbeat() {
+        if sharedStore.loadTimedUnblocks().isEmpty {
+            activityCenter.stopMonitoring([DeviceActivityName(SharedConstants.reblockHeartbeatActivityName)])
+        } else {
+            startHeartbeat()
+        }
     }
 
     func refresh(screenTimeService: any ScreenTimeProviding) {
@@ -299,6 +316,7 @@ final class TimedUnblockService {
                 sharedStore.removeTimedUnblock(id: unblock.id)
             }
         }
+        syncHeartbeat()
     }
 
     private func reapplyShield(

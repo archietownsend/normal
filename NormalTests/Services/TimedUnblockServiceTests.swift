@@ -32,7 +32,10 @@ struct TimedUnblockServiceTests {
         )
 
         #expect(screenTime.removeShieldOnAllCalled)
-        #expect(activity.startCalls.count == 1)
+        #expect(activity.startCalls.map(\.name.rawValue) == [
+            SharedConstants.mainTimedUnblockActivityName,
+            SharedConstants.reblockHeartbeatActivityName,
+        ])
         #expect(store.timedUnblocks.count == 1)
         #expect(service.isMainUnblockActive)
     }
@@ -50,7 +53,10 @@ struct TimedUnblockServiceTests {
         )
 
         #expect(screenTime.removeFromShieldsCalled)
-        #expect(activity.startCalls.count == 1)
+        #expect(activity.startCalls.map(\.name.rawValue) == [
+            SharedConstants.groupTimedUnblockActivityName(for: groupId),
+            SharedConstants.reblockHeartbeatActivityName,
+        ])
         #expect(store.timedUnblocks.count == 1)
         #expect(service.isGroupUnblockActive(groupId: groupId))
     }
@@ -325,6 +331,39 @@ struct TimedUnblockServiceTests {
 
         #expect(!service.isMainUnblockActive)
         #expect(store.timedUnblocks.count == 1)
+    }
+
+    @Test func heartbeatRepeatsEveryHalfHour() {
+        let heartbeat = DeviceActivityScheduleFactory.heartbeat()
+        #expect(heartbeat.intervalStart == DateComponents(minute: 0, second: 0))
+        #expect(heartbeat.intervalEnd == DateComponents(minute: 30, second: 0))
+        #expect(heartbeat.repeats)
+    }
+
+    @Test func reconcileStopsHeartbeatOnceNoUnblocksRemain() {
+        let (service, activity, store) = makeService()
+        store.timedUnblocks = [expiredMainDTO()]
+
+        service.reconcile(screenTimeService: FakeScreenTimeService())
+
+        #expect(activity.stopCalls.last == [DeviceActivityName(SharedConstants.reblockHeartbeatActivityName)])
+        #expect(!activity.startCalls.map(\.name.rawValue).contains(SharedConstants.reblockHeartbeatActivityName))
+    }
+
+    @Test func reconcileRegistersHeartbeatWhileUnblocksArePending() throws {
+        let (service, activity, store) = makeService()
+        store.timedUnblocks = try [TimedUnblockDTO(
+            id: TimedUnblockService.mainID,
+            selectionData: FamilyActivitySelection().toData(),
+            endDate: .now.addingTimeInterval(.hours(1)),
+            activityName: SharedConstants.mainTimedUnblockActivityName,
+            isGroupUnblock: false
+        )]
+
+        service.reconcile(screenTimeService: FakeScreenTimeService())
+
+        #expect(activity.startCalls.last?.name.rawValue == SharedConstants.reblockHeartbeatActivityName)
+        #expect(activity.startCalls.last?.schedule == DeviceActivityScheduleFactory.heartbeat())
     }
 
     @Test func reconcileReblocksUnblockThatExpiredWhileAppWasDead() {
