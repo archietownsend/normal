@@ -1,0 +1,104 @@
+import Foundation
+import ManagedSettings
+
+nonisolated protocol ShieldApplying: AnyObject {
+    func currentShields() -> ShieldPlan
+    func apply(_ plan: ShieldPlan)
+}
+
+nonisolated enum SharedFileLock {
+    private static var url: URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: SharedConstants.appGroupID)?
+            .appending(path: "shields.lock")
+    }
+
+    static func withLock<T>(_ body: () throws -> T) rethrows -> T? {
+        guard let path = url?.path(percentEncoded: false) else { return try body() }
+        let descriptor = open(path, O_CREAT | O_RDWR, 0o644)
+        guard descriptor >= 0 else {
+            return errno == EPERM || errno == EACCES ? nil : try body()
+        }
+        defer { close(descriptor) }
+        while flock(descriptor, LOCK_EX) != 0 {
+            guard errno == EINTR else { return try body() }
+        }
+        defer { flock(descriptor, LOCK_UN) }
+        return try body()
+    }
+}
+
+nonisolated enum ShieldReconciler {
+    @discardableResult
+    static func reconcile(
+        sharedStore: some SharedStoreProviding,
+        shields: some ShieldApplying,
+        monitoredActivities: Set<String>,
+        at date: Date = .now,
+        update: (inout ManualBlockState) -> Void = { _ in }
+    ) -> ShieldPlan? {
+        SharedFileLock.withLock {
+            let schedules = sharedStore.loadSchedules()
+                .filter { $0.isEffectivelyEnabled(monitoredActivities: monitoredActivities) }
+            let timedUnblocks = sharedStore.loadTimedUnblocks()
+            let current = shields.currentShields()
+
+            let saved = sharedStore.loadManualBlockState()
+            var manual = saved
+                ?? ShieldResolver.migratedManualState(
+                    shielded: current,
+                    enabledSchedules: schedules,
+                    timedUnblocks: timedUnblocks,
+                    scheduleOverrideActive: sharedStore.isScheduleOverrideActive(),
+                    scheduleOverrideSince: sharedStore.loadScheduleOverrideSince(),
+                    at: date
+                )
+            update(&manual)
+            if manual != saved {
+                sharedStore.saveManualBlockState(manual)
+            }
+
+            let plan = ShieldResolver.plan(
+                manual: manual,
+                enabledSchedules: schedules,
+                timedUnblocks: timedUnblocks,
+                customDomainsEnabled: sharedStore.isCustomDomainsEnabled(),
+                at: date
+            )
+            if plan.differs(from: current) {
+                shields.apply(plan)
+            }
+            return plan
+        }
+    }
+}
+
+nonisolated extension ShieldPlan {
+    func differs(from current: ShieldPlan) -> Bool {
+        applications != current.applications
+            || webDomains != current.webDomains
+            || categories != current.categories
+            || customDomains != current.customDomains
+            || (denyAppRemoval != nil && denyAppRemoval != current.denyAppRemoval)
+    }
+}
+
+extension ManagedSettingsStore: ShieldApplying {
+    func currentShields() -> ShieldPlan {
+        var plan = ShieldPlan()
+        plan.applications = shield.applications ?? []
+        plan.webDomains = shield.webDomains ?? []
+        plan.categories = shield.applicationCategories.tokenSet
+        plan.customDomains = Set(filterDomains().compactMap(\.domain))
+        plan.denyAppRemoval = application.denyAppRemoval ?? false
+        return plan
+    }
+
+    func apply(_ plan: ShieldPlan) {
+        replaceShields(with: plan.selection)
+        replaceFilterDomains(Array(plan.customDomains))
+        if let deny = plan.denyAppRemoval {
+            application.denyAppRemoval = deny
+        }
+    }
+}

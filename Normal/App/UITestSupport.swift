@@ -1,4 +1,6 @@
+import FamilyControls
 import Foundation
+import ManagedSettings
 
 enum UITestSupport {
     private static let arguments = ProcessInfo.processInfo.arguments
@@ -31,6 +33,19 @@ enum UITestSupport {
     static let defaultDurationSeconds: Int? = value(after: "-uiTestDefaultDuration").flatMap(Int.init)
 
     static let stubScanValue = "UITEST-SCAN-VALUE"
+
+    static let mainSelection = selection(apps: [1, 2, 3])
+
+    static let groupSelection = selection(apps: [1])
+
+    private static func selection(apps: [UInt8]) -> FamilyActivitySelection {
+        var selection = FamilyActivitySelection()
+        selection.applicationTokens = Set(apps.compactMap { id in
+            let json = #"{"data":"\#(Data([id]).base64EncodedString())"}"#
+            return try? JSONDecoder().decode(ApplicationToken.self, from: Data(json.utf8))
+        })
+        return selection
+    }
 
     private static func value(after flag: String) -> String? {
         guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else { return nil }

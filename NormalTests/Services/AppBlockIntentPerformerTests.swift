@@ -20,7 +20,6 @@ struct AppBlockIntentPerformerTests {
             container: container,
             screenTimeService: screenTime,
             timedUnblockService: timedUnblock,
-            scheduleService: ScheduleService(activityCenter: activity, sharedStore: store),
             syncsExternalSurfaces: false
         )
     }
@@ -55,8 +54,8 @@ struct AppBlockIntentPerformerTests {
 
         let outcome = try performer.blockAll()
 
-        #expect(screenTime.applyShieldOnAllCalled)
-        #expect(screenTime.applyShieldOnAllCustomDomains == ["example.com"])
+        #expect(screenTime.blockAllCalled)
+        #expect(screenTime.blockAllCustomDomains == ["example.com"])
         #expect(!outcome.wasAlreadyBlocked)
     }
 
@@ -90,7 +89,7 @@ struct AppBlockIntentPerformerTests {
         #expect(throws: BlockIntentError.noAppsSelected) {
             try performer.blockAll()
         }
-        #expect(!screenTime.applyShieldOnAllCalled)
+        #expect(!screenTime.blockAllCalled)
     }
 
     @Test func blockAllRequiresCompletedSetup() throws {
@@ -108,7 +107,7 @@ struct AppBlockIntentPerformerTests {
         #expect(throws: BlockIntentError.screenTimeNotAuthorized) {
             try performer.blockAll()
         }
-        #expect(!screenTime.applyShieldOnAllCalled)
+        #expect(!screenTime.blockAllCalled)
     }
 
     @Test func blockAllRequiresGlobalKey() throws {
@@ -133,8 +132,8 @@ struct AppBlockIntentPerformerTests {
         let outcome = try performer.blockGroup(id: group.id)
 
         #expect(outcome == BlockOutcome(name: "Social", wasAlreadyBlocked: false))
-        #expect(screenTime.addToShieldsCalled)
-        #expect(screenTime.addToShieldsCustomDomains == ["x.com"])
+        #expect(screenTime.blockCalled)
+        #expect(screenTime.blockCustomDomains == ["x.com"])
     }
 
     @Test func blockGroupThrowsForDeletedGroup() throws {
@@ -143,7 +142,7 @@ struct AppBlockIntentPerformerTests {
         #expect(throws: BlockIntentError.groupNotFound) {
             try performer.blockGroup(id: UUID())
         }
-        #expect(!screenTime.addToShieldsCalled)
+        #expect(!screenTime.blockCalled)
     }
 
     @Test func blockGroupEndsTimedUnblock() throws {

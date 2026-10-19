@@ -124,7 +124,11 @@ struct AppSelectView: View {
         } else {
             modelContext.insert(SelectedApps(selection: new, customDomains: customDomains))
         }
-        timedUnblockService.updateMainSelection(new, customDomains: effectiveCustomDomains)
+        timedUnblockService.updateMainSelection(
+            new,
+            customDomains: effectiveCustomDomains,
+            screenTimeService: screenTimeService
+        )
     }
 
     private func persistCustomDomains() {
@@ -134,6 +138,10 @@ struct AppSelectView: View {
         } else {
             modelContext.insert(SelectedApps(selection: selection, customDomains: customDomains))
         }
-        timedUnblockService.updateMainSelection(selection, customDomains: effectiveCustomDomains)
+        timedUnblockService.updateMainSelection(
+            selection,
+            customDomains: effectiveCustomDomains,
+            screenTimeService: screenTimeService
+        )
     }
 }

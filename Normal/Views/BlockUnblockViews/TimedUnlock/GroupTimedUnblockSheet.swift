@@ -27,7 +27,7 @@ struct GroupTimedUnblockSheet: View {
                 )
             },
             onPermanentUnblock: {
-                screenTimeService.removeFromShields(selection: group.selection, customDomains: customDomains)
+                screenTimeService.unblock(selection: group.selection, customDomains: customDomains)
             }
         )
     }

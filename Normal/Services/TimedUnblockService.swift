@@ -9,6 +9,7 @@ final class TimedUnblockService {
     private let activityCenter: any DeviceActivityProviding
     private let sharedStore: any SharedStoreProviding
     private let onExpiration: @MainActor @Sendable () -> Void
+    private let clock: () -> Date
 
     private(set) var activeUnblocks: [String: Date] = [:]
     private var expirationTasks: [String: Task<Void, Never>] = [:]
@@ -18,10 +19,12 @@ final class TimedUnblockService {
     init(
         activityCenter: any DeviceActivityProviding = DeviceActivityCenter(),
         sharedStore: any SharedStoreProviding = SharedStore(),
+        clock: @escaping () -> Date = { .now },
         onExpiration: @escaping @MainActor @Sendable () -> Void
     ) {
         self.activityCenter = activityCenter
         self.sharedStore = sharedStore
+        self.clock = clock
         self.onExpiration = onExpiration
         restoreState()
     }
@@ -60,7 +63,7 @@ final class TimedUnblockService {
         let activityName = SharedConstants.mainTimedUnblockActivityName
         cancelMonitoring(activityName: activityName)
 
-        let start = Date.now
+        let start = clock()
         let endDate = start.addingTimeInterval(duration.timeInterval)
         try scheduleActivity(name: activityName, start: start, endDate: endDate)
 
@@ -76,8 +79,8 @@ final class TimedUnblockService {
         )
 
         cancelAllGroupUnblocks()
-        screenTimeService.removeShieldOnAll(blockAllPreventsAppDelete: blockAllPreventsAppDelete)
-        sharedStore.setScheduleOverrideActive(false)
+        syncHeartbeat()
+        screenTimeService.reconcile()
     }
 
     func startGroup(
@@ -91,7 +94,7 @@ final class TimedUnblockService {
         let activityName = SharedConstants.groupTimedUnblockActivityName(for: groupId)
         cancelMonitoring(activityName: activityName)
 
-        let start = Date.now
+        let start = clock()
         let endDate = start.addingTimeInterval(duration.timeInterval)
         try scheduleActivity(name: activityName, start: start, endDate: endDate)
 
@@ -105,7 +108,8 @@ final class TimedUnblockService {
             isGroupUnblock: true
         )
 
-        screenTimeService.removeFromShields(selection: selection, customDomains: customDomains)
+        syncHeartbeat()
+        screenTimeService.reconcile()
     }
 
     func cancelMain(
@@ -115,25 +119,20 @@ final class TimedUnblockService {
         blockAllPreventsAppDelete: Bool = false
     ) {
         cancelMonitoring(activityName: SharedConstants.mainTimedUnblockActivityName)
-        screenTimeService.applyShieldOnAll(
+        cancelAllGroupUnblocks()
+        forget(id: Self.mainID)
+        syncHeartbeat()
+        screenTimeService.blockAll(
             selection: selection,
             customDomains: customDomains,
             blockAllPreventsAppDelete: blockAllPreventsAppDelete
         )
-        cancelAllGroupUnblocks()
-        forget(id: Self.mainID)
     }
 
-    func cancelGroup(
-        groupId: UUID,
-        selection: FamilyActivitySelection,
-        customDomains: [String] = [],
-        screenTimeService: any ScreenTimeProviding
-    ) {
-        let id = groupId.uuidString
+    func cancelGroup(groupId: UUID) {
         cancelMonitoring(activityName: SharedConstants.groupTimedUnblockActivityName(for: groupId))
-        screenTimeService.addToShields(selection: selection, customDomains: customDomains)
-        forget(id: id)
+        forget(id: groupId.uuidString)
+        syncHeartbeat()
     }
 
     func clearAll() {
@@ -145,6 +144,7 @@ final class TimedUnblockService {
             }
             forget(id: key)
         }
+        syncHeartbeat()
     }
 
     func discardAll() {
@@ -161,12 +161,26 @@ final class TimedUnblockService {
         }
         activeUnblocks.removeAll()
         activityCenter.stopMonitoring(activityNames.map { DeviceActivityName($0) })
+        syncHeartbeat()
     }
 
-    func updateMainSelection(_ selection: FamilyActivitySelection, customDomains: [String] = []) {
+    func updateMainSelection(
+        _ selection: FamilyActivitySelection,
+        customDomains: [String] = [],
+        screenTimeService: any ScreenTimeProviding
+    ) {
         guard let endDate = activeUnblocks[Self.mainID] else { return }
         let activityName = SharedConstants.mainTimedUnblockActivityName
         let existing = sharedStore.findTimedUnblock(activityName: activityName)
+        let previous = existing.flatMap { try? FamilyActivitySelection.fromData($0.selectionData) }
+            ?? FamilyActivitySelection()
+        screenTimeService.updateMainList(
+            from: previous,
+            customDomains: existing?.customDomains ?? [],
+            to: selection,
+            customDomains: customDomains,
+            addedBlockedAsOf: (existing?.startDate ?? clock()).addingTimeInterval(-1)
+        )
         try? persist(
             id: Self.mainID,
             selection: selection,
@@ -273,23 +287,10 @@ final class TimedUnblockService {
             during: schedule,
             events: [:]
         )
-        startHeartbeat()
-    }
-
-    private func startHeartbeat() {
-        try? activityCenter.startMonitoring(
-            DeviceActivityName(SharedConstants.reblockHeartbeatActivityName),
-            during: DeviceActivityScheduleFactory.heartbeat(),
-            events: [:]
-        )
     }
 
     private func syncHeartbeat() {
-        if sharedStore.loadTimedUnblocks().isEmpty {
-            activityCenter.stopMonitoring([DeviceActivityName(SharedConstants.reblockHeartbeatActivityName)])
-        } else {
-            startHeartbeat()
-        }
+        activityCenter.syncHeartbeat(sharedStore: sharedStore, at: clock())
     }
 
     func refresh(screenTimeService: any ScreenTimeProviding) {
@@ -302,42 +303,23 @@ final class TimedUnblockService {
     }
 
     private func restoreState() {
-        for unblock in sharedStore.loadTimedUnblocks() where unblock.endDate > .now {
+        for unblock in sharedStore.loadTimedUnblocks() where unblock.endDate > clock() {
             activeUnblocks[unblock.id] = unblock.endDate
             scheduleExpiration(id: unblock.id, at: unblock.endDate)
         }
     }
 
     func reconcile(screenTimeService: any ScreenTimeProviding) {
+        screenTimeService.reconcile()
         for unblock in sharedStore.loadTimedUnblocks() {
-            if unblock.endDate > .now {
+            if unblock.endDate > clock() {
                 activeUnblocks[unblock.id] = unblock.endDate
                 scheduleExpiration(id: unblock.id, at: unblock.endDate)
             } else {
-                reapplyShield(for: unblock, screenTimeService: screenTimeService)
                 sharedStore.removeTimedUnblock(id: unblock.id)
             }
         }
         syncHeartbeat()
-    }
-
-    private func reapplyShield(
-        for unblock: TimedUnblockDTO,
-        screenTimeService: any ScreenTimeProviding
-    ) {
-        guard let selection = try? FamilyActivitySelection.fromData(unblock.selectionData)
-        else { return }
-
-        if unblock.isGroupUnblock {
-            guard !sharedStore.isMainTimedUnblockActive() else { return }
-            screenTimeService.addToShields(selection: selection, customDomains: unblock.customDomains)
-        } else {
-            screenTimeService.applyShieldOnAll(
-                selection: selection,
-                customDomains: unblock.customDomains,
-                blockAllPreventsAppDelete: unblock.blockAllPreventsAppDelete ?? false
-            )
-        }
     }
 }
 

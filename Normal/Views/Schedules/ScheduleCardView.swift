@@ -241,8 +241,11 @@ struct ScheduleCardView: View {
 
     private func toggleEnabled() {
         do {
-            try scheduleService.toggleEnabled(schedule, screenTimeService: screenTimeService)
-            scheduleService.syncAllToSharedStore(allSchedules)
+            try scheduleService.toggleEnabled(
+                schedule,
+                allSchedules: allSchedules,
+                screenTimeService: screenTimeService
+            )
         } catch {
             self.error = error
         }
@@ -259,9 +262,8 @@ struct ScheduleCardView: View {
     }
 
     private func deleteSchedule() {
-        scheduleService.remove(schedule, screenTimeService: screenTimeService)
-        modelContext.delete(schedule)
         let remaining = allSchedules.filter { $0.id != schedule.id }
-        scheduleService.syncAllToSharedStore(remaining)
+        scheduleService.remove(schedule, remaining: remaining, screenTimeService: screenTimeService)
+        modelContext.delete(schedule)
     }
 }

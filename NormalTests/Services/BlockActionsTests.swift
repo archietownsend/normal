@@ -34,13 +34,12 @@ struct BlockActionsTests {
             mainSelection: main,
             settings: makeSettings(customDomains: false, preventsAppDelete: false),
             screenTimeService: screenTime,
-            timedUnblockService: makeTimedUnblock(),
-            scheduleService: makeSchedule()
+            timedUnblockService: makeTimedUnblock()
         )
 
-        #expect(screenTime.applyShieldOnAllCalled)
-        #expect(screenTime.applyShieldOnAllCustomDomains == [])
-        #expect(screenTime.applyShieldOnAllBlockAllPreventsAppDelete == false)
+        #expect(screenTime.blockAllCalled)
+        #expect(screenTime.blockAllCustomDomains == [])
+        #expect(screenTime.blockAllPreventsAppDelete == false)
     }
 
     @Test func blockAllIncludesDomainsAndPreventsDeleteWhenEnabled() {
@@ -50,15 +49,14 @@ struct BlockActionsTests {
             mainSelection: main,
             settings: makeSettings(customDomains: true, preventsAppDelete: true),
             screenTimeService: screenTime,
-            timedUnblockService: makeTimedUnblock(),
-            scheduleService: makeSchedule()
+            timedUnblockService: makeTimedUnblock()
         )
 
-        #expect(screenTime.applyShieldOnAllCustomDomains == ["example.com"])
-        #expect(screenTime.applyShieldOnAllBlockAllPreventsAppDelete == true)
+        #expect(screenTime.blockAllCustomDomains == ["example.com"])
+        #expect(screenTime.blockAllPreventsAppDelete == true)
     }
 
-    @Test func blockAllEndsTimedUnblocksAndClearsScheduleOverride() throws {
+    @Test func blockAllEndsTimedUnblocks() throws {
         let timedUnblock = makeTimedUnblock()
         let groupID = UUID()
         try timedUnblock.startGroup(
@@ -67,19 +65,15 @@ struct BlockActionsTests {
             selection: FamilyActivitySelection(),
             screenTimeService: screenTime
         )
-        store.scheduleOverrideActive = true
-
         BlockActions.blockAll(
             mainSelection: SelectedApps(selection: FamilyActivitySelection()),
             settings: makeSettings(),
             screenTimeService: screenTime,
-            timedUnblockService: timedUnblock,
-            scheduleService: makeSchedule()
+            timedUnblockService: timedUnblock
         )
 
         #expect(timedUnblock.activeUnblocks.isEmpty)
         #expect(store.timedUnblocks.isEmpty)
-        #expect(!store.scheduleOverrideActive)
     }
 
     // MARK: - blockGroup
@@ -94,8 +88,8 @@ struct BlockActionsTests {
             timedUnblockService: makeTimedUnblock()
         )
 
-        #expect(screenTime.addToShieldsCalled)
-        #expect(screenTime.addToShieldsCustomDomains == ["x.com"])
+        #expect(screenTime.blockCalled)
+        #expect(screenTime.blockCustomDomains == ["x.com"])
         #expect(activity.stopCalls.isEmpty)
     }
 
@@ -117,7 +111,7 @@ struct BlockActionsTests {
         )
 
         #expect(!timedUnblock.isGroupUnblockActive(groupId: group.id))
-        #expect(screenTime.addToShieldsCalled)
+        #expect(screenTime.blockCalled)
         let stopped = activity.stopCalls.flatMap { $0 }.map(\.rawValue)
         #expect(stopped.contains(SharedConstants.groupTimedUnblockActivityName(for: group.id)))
     }
@@ -175,11 +169,11 @@ struct BlockActionsTests {
 
         let foreground = FakeScreenTimeService()
         timedUnblock.reconcile(screenTimeService: foreground)
-        #expect(foreground.applyShieldOnAllCalled == false)
-        #expect(foreground.addToShieldsCalled == false)
+        #expect(foreground.blockAllCalled == false)
+        #expect(foreground.blockCalled == false)
     }
 
-    @Test func emergencyUnblockDisablesSchedulesAndClearsTheOverride() {
+    @Test func emergencyUnblockDisablesSchedules() {
         let schedule = BlockSchedule(
             name: "Work",
             selection: FamilyActivitySelection(),
@@ -190,12 +184,10 @@ struct BlockActionsTests {
             isTimed: true,
             isEnabled: true
         )
-        store.scheduleOverrideActive = true
-
         emergencyUnblock(schedules: [schedule])
 
         #expect(schedule.isEnabled == false)
-        #expect(store.scheduleOverrideActive == false)
+        #expect(store.schedules.first?.isEnabled == false)
     }
 
     @Test func emergencyUnblockLiftsSpentMaxDailyLimits() {

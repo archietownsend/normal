@@ -9,19 +9,20 @@ final class FakeScreenTimeService: ScreenTimeProviding {
     var authorizationState: AuthorizationState = .notAuthorized
     var lastUpdate: Date = .now
 
-    var applyShieldOnAllCalled = false
-    var applyShieldOnAllSelection: FamilyActivitySelection?
-    var applyShieldOnAllCustomDomains: [String]?
-    var applyShieldOnAllBlockAllPreventsAppDelete: Bool?
-    var removeShieldOnAllCalled = false
-    var removeShieldOnAllBlockAllPreventsAppDelete: Bool?
+    var blockAllCalled = false
+    var blockAllSelection: FamilyActivitySelection?
+    var blockAllCustomDomains: [String]?
+    var blockAllPreventsAppDelete: Bool?
+    var unblockAllCalled = false
+    var unblockAllPreventsAppDelete: Bool?
     var removeAllRestrictionsCalled = false
-    var addToShieldsCalled = false
-    var addToShieldsSelection: FamilyActivitySelection?
-    var addToShieldsCustomDomains: [String]?
-    var removeFromShieldsCalled = false
-    var removeFromShieldsSelection: FamilyActivitySelection?
-    var removeFromShieldsCustomDomains: [String]?
+    var blockCalled = false
+    var blockSelection: FamilyActivitySelection?
+    var blockCustomDomains: [String]?
+    var unblockCalled = false
+    var unblockSelection: FamilyActivitySelection?
+    var unblockCustomDomains: [String]?
+    var reconcileCallCount = 0
     var enablePreventAppDeleteCalled = false
     var disablePreventAppDeleteCalled = false
     var notifyUpdateCallCount = 0
@@ -66,23 +67,23 @@ final class FakeScreenTimeService: ScreenTimeProviding {
         disablePreventAppDeleteCalled = true
     }
 
-    func applyShieldOnAll(
+    func blockAll(
         selection: FamilyActivitySelection,
         customDomains: [String] = [],
         blockAllPreventsAppDelete: Bool
     ) {
-        applyShieldOnAllCalled = true
-        applyShieldOnAllSelection = selection
-        applyShieldOnAllCustomDomains = customDomains
-        applyShieldOnAllBlockAllPreventsAppDelete = blockAllPreventsAppDelete
+        blockAllCalled = true
+        blockAllSelection = selection
+        blockAllCustomDomains = customDomains
+        self.blockAllPreventsAppDelete = blockAllPreventsAppDelete
         if blockAllPreventsAppDelete {
             enablePreventAppDelete()
         }
     }
 
-    func removeShieldOnAll(blockAllPreventsAppDelete: Bool) {
-        removeShieldOnAllCalled = true
-        removeShieldOnAllBlockAllPreventsAppDelete = blockAllPreventsAppDelete
+    func unblockAll(blockAllPreventsAppDelete: Bool) {
+        unblockAllCalled = true
+        unblockAllPreventsAppDelete = blockAllPreventsAppDelete
         if blockAllPreventsAppDelete {
             disablePreventAppDelete()
         }
@@ -93,19 +94,29 @@ final class FakeScreenTimeService: ScreenTimeProviding {
         disablePreventAppDelete()
     }
 
-    func addToShields(selection: FamilyActivitySelection, customDomains: [String] = []) {
-        addToShieldsCalled = true
-        addToShieldsSelection = selection
-        addToShieldsCustomDomains = customDomains
+    func block(selection: FamilyActivitySelection, customDomains: [String] = []) {
+        blockCalled = true
+        blockSelection = selection
+        blockCustomDomains = customDomains
     }
 
-    func removeFromShields(selection: FamilyActivitySelection, customDomains: [String] = []) {
-        removeFromShieldsCalled = true
-        removeFromShieldsSelection = selection
-        removeFromShieldsCustomDomains = customDomains
+    func unblock(selection: FamilyActivitySelection, customDomains: [String] = []) {
+        unblockCalled = true
+        unblockSelection = selection
+        unblockCustomDomains = customDomains
     }
 
-    func clearCustomDomainFilter() {}
+    func updateMainList(
+        from _: FamilyActivitySelection,
+        customDomains _: [String],
+        to _: FamilyActivitySelection,
+        customDomains _: [String],
+        addedBlockedAsOf _: Date
+    ) {}
+
+    func reconcile() {
+        reconcileCallCount += 1
+    }
 
     func activeShieldCount() -> Int {
         stubActiveShieldCount

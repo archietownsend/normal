@@ -36,7 +36,7 @@ struct NormalApp: App {
         }
 
         if UITestSupport.isActive {
-            context.insert(SelectedApps(selection: FamilyActivitySelection()))
+            context.insert(SelectedApps(selection: UITestSupport.mainSelection))
             if !UITestSupport.noKeys {
                 context.insert(Key(name: "Test Key", type: .qr, rawValue: UITestSupport.stubScanValue))
             }
@@ -44,7 +44,7 @@ struct NormalApp: App {
                 let group = AppGroup(
                     id: UITestSupport.seedGroupID,
                     name: "Test Group",
-                    selection: FamilyActivitySelection()
+                    selection: UITestSupport.groupSelection
                 )
                 context.insert(group)
                 context.insert(Key(name: "Group Key", type: .qr, rawValue: "GROUP-VALUE", groupID: group.id))

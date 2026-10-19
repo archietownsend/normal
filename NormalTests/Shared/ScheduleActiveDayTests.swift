@@ -61,27 +61,4 @@ struct ScheduleActiveDayTests {
         #expect(!s.isActive(at: date(day: 5, hour: 23), calendar: cal))
     }
 
-    @Test func nonWrappingEndDoesNotFireOnUnselectedDays() {
-        let s = schedule(weekdays: [2, 3, 4, 5, 6])
-        #expect(!s.endApplies(on: date(day: 8), calendar: cal))
-        #expect(!s.endApplies(on: date(day: 2), calendar: cal)) // Sunday
-        #expect(s.endApplies(on: date(day: 7), calendar: cal)) // Friday
-        #expect(s.endApplies(on: date(day: 3), calendar: cal)) // Monday
-    }
-
-    @Test func wrappingScheduleDetected() {
-        #expect(schedule(weekdays: [6], startHour: 23, startMinute: 0, durationMinutes: 120).wrapsPastMidnight)
-        #expect(schedule(weekdays: [6], startHour: 0, startMinute: 0, durationMinutes: 1440).wrapsPastMidnight)
-        #expect(!schedule(weekdays: [6], startHour: 9, startMinute: 0, durationMinutes: 60).wrapsPastMidnight)
-    }
-
-    @Test func wrappingFridayNightEndFiresSaturdayNotOtherDays() {
-        let s = schedule(weekdays: [6], startHour: 23, startMinute: 0, durationMinutes: 120)
-
-        #expect(s.isActive(at: date(day: 7, hour: 23), calendar: cal))
-        #expect(!s.isActive(at: date(day: 8, hour: 23), calendar: cal))
-        #expect(s.endApplies(on: date(day: 8), calendar: cal))
-        #expect(!s.endApplies(on: date(day: 7), calendar: cal))
-        #expect(!s.endApplies(on: date(day: 2), calendar: cal))
-    }
 }

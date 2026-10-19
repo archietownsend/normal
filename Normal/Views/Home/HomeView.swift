@@ -5,7 +5,6 @@ import SwiftUI
 struct HomeView: View {
     @Environment(ScreenTimeService.self) private var screenTimeService
     @Environment(TimedUnblockService.self) private var timedUnblockService
-    @Environment(ScheduleService.self) private var scheduleService
     @Environment(AppReviewService.self) private var appReviewService
     @Environment(\.requestReview) private var requestReview
 
@@ -79,10 +78,9 @@ struct HomeView: View {
                     recordUnblockForReview()
                 },
                 onPermanentUnblock: {
-                    screenTimeService.removeShieldOnAll(
+                    screenTimeService.unblockAll(
                         blockAllPreventsAppDelete: settings.blockAllPreventsAppDelete
                     )
-                    scheduleService.setScheduleOverride(true)
                     recordUnblockForReview()
                 }
             )
@@ -94,8 +92,7 @@ struct HomeView: View {
             mainSelection: selection,
             settings: settings,
             screenTimeService: screenTimeService,
-            timedUnblockService: timedUnblockService,
-            scheduleService: scheduleService
+            timedUnblockService: timedUnblockService
         )
     }
 

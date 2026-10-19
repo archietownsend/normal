@@ -26,6 +26,7 @@ struct ScheduleFormSheet: View {
     @State private var isShowingAppSelect = false
     @State private var error: Error?
     @State private var showDeleteConfirmation = false
+    @State private var inserted: BlockSchedule?
 
     private var isNew: Bool {
         existing == nil
@@ -275,10 +276,9 @@ struct ScheduleFormSheet: View {
 
     private func deleteSchedule() {
         guard let existing else { return }
-        scheduleService.remove(existing, screenTimeService: screenTimeService)
-        modelContext.delete(existing)
         let remaining = allSchedules.filter { $0.id != existing.id }
-        scheduleService.syncAllToSharedStore(remaining)
+        scheduleService.remove(existing, remaining: remaining, screenTimeService: screenTimeService)
+        modelContext.delete(existing)
         dismiss()
     }
 
@@ -289,18 +289,18 @@ struct ScheduleFormSheet: View {
         let durationMinutes = computedDurationMinutes
 
         let schedule: BlockSchedule
-        if let existing {
-            existing.name = trimmed
-            existing.selection = selection
-            existing.startHour = components.hour ?? 0
-            existing.startMinute = components.minute ?? 0
-            existing.durationMinutes = durationMinutes
-            existing.weekdays = selectedWeekdays
-            existing.shouldBlock = shouldBlock
-            existing.isTimed = isTimed
-            existing.isEnabled = isEnabled
-            existing.customDomains = storedCustomDomains
-            schedule = existing
+        if let target = existing ?? inserted {
+            target.name = trimmed
+            target.selection = selection
+            target.startHour = components.hour ?? 0
+            target.startMinute = components.minute ?? 0
+            target.durationMinutes = durationMinutes
+            target.weekdays = selectedWeekdays
+            target.shouldBlock = shouldBlock
+            target.isTimed = isTimed
+            target.isEnabled = isEnabled
+            target.customDomains = storedCustomDomains
+            schedule = target
         } else {
             let nextIndex = SortIndexing.nextIndex(after: allSchedules, sortIndex: \.sortIndex)
             schedule = BlockSchedule(
@@ -317,12 +317,13 @@ struct ScheduleFormSheet: View {
                 customDomains: storedCustomDomains
             )
             modelContext.insert(schedule)
+            inserted = schedule
         }
 
         do {
             try scheduleService.syncAndPersist(
                 schedule,
-                allSchedules: isNew ? allSchedules + [schedule] : allSchedules,
+                allSchedules: allSchedules.contains { $0.id == schedule.id } ? allSchedules : allSchedules + [schedule],
                 screenTimeService: screenTimeService
             )
             dismiss()

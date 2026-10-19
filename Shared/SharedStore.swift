@@ -38,13 +38,6 @@ struct SharedStore: SharedStoreProviding, Sendable {
         loadTimedUnblocks().first { $0.activityName == activityName }
     }
 
-    func isMainTimedUnblockActive() -> Bool {
-        guard let main = loadTimedUnblocks().first(where: { $0.id == "main" }) else {
-            return false
-        }
-        return main.endDate > Date.now
-    }
-
     func saveSchedules(_ dtos: [ScheduleDTO]) {
         let data = try? PropertyListEncoder().encode(dtos)
         defaults.set(data, forKey: SharedConstants.DefaultsKey.schedules)
@@ -59,18 +52,6 @@ struct SharedStore: SharedStoreProviding, Sendable {
 
     func isScheduleOverrideActive() -> Bool {
         defaults.bool(forKey: SharedConstants.DefaultsKey.scheduleOverride)
-    }
-
-    func setScheduleOverrideActive(_ active: Bool) {
-        defaults.set(active, forKey: SharedConstants.DefaultsKey.scheduleOverride)
-        if active {
-            defaults.set(
-                Date.now.timeIntervalSinceReferenceDate,
-                forKey: SharedConstants.DefaultsKey.scheduleOverrideSince
-            )
-        } else {
-            defaults.removeObject(forKey: SharedConstants.DefaultsKey.scheduleOverrideSince)
-        }
     }
 
     func loadScheduleOverrideSince() -> Date? {
@@ -131,6 +112,16 @@ struct SharedStore: SharedStoreProviding, Sendable {
     func saveUsageLimitConfig(_ config: UsageLimitConfig) {
         let data = try? PropertyListEncoder().encode(config)
         defaults.set(data, forKey: SharedConstants.DefaultsKey.usageLimitConfig)
+    }
+
+    func saveManualBlockState(_ state: ManualBlockState) {
+        let data = try? PropertyListEncoder().encode(state)
+        defaults.set(data, forKey: SharedConstants.DefaultsKey.manualBlockState)
+    }
+
+    func loadManualBlockState() -> ManualBlockState? {
+        guard let data = defaults.data(forKey: SharedConstants.DefaultsKey.manualBlockState) else { return nil }
+        return try? PropertyListDecoder().decode(ManualBlockState.self, from: data)
     }
 
     func loadUsageLimitConfig() -> UsageLimitConfig {
