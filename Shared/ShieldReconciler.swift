@@ -7,14 +7,14 @@ nonisolated protocol ShieldApplying: AnyObject {
 }
 
 nonisolated enum SharedFileLock {
-    private static var url: URL? {
+    private static var defaultURL: URL? {
         FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: SharedConstants.appGroupID)?
             .appending(path: "shields.lock")
     }
 
-    static func withLock<T>(_ body: () throws -> T) rethrows -> T? {
-        guard let path = url?.path(percentEncoded: false) else { return try body() }
+    static func withLock<T>(at url: URL? = nil, _ body: () throws -> T) rethrows -> T? {
+        guard let path = (url ?? defaultURL)?.path(percentEncoded: false) else { return try body() }
         let descriptor = open(path, O_CREAT | O_RDWR, 0o644)
         guard descriptor >= 0 else {
             return errno == EPERM || errno == EACCES ? nil : try body()
@@ -35,9 +35,10 @@ nonisolated enum ShieldReconciler {
         shields: some ShieldApplying,
         monitoredActivities: Set<String>,
         at date: Date = .now,
+        lockURL: URL? = nil,
         update: (inout ManualBlockState) -> Void = { _ in }
     ) -> ShieldPlan? {
-        SharedFileLock.withLock {
+        SharedFileLock.withLock(at: lockURL) {
             let schedules = sharedStore.loadSchedules()
                 .filter { $0.isEffectivelyEnabled(monitoredActivities: monitoredActivities) }
             let timedUnblocks = sharedStore.loadTimedUnblocks()
