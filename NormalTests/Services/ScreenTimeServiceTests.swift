@@ -1,37 +1,61 @@
 import FamilyControls
+import Foundation
 @testable import Normal
 import Testing
 
 @MainActor
 struct ScreenTimeServiceTests {
+    private func makeService() -> (ScreenTimeService, InMemoryShieldStore) {
+        let shields = InMemoryShieldStore(startBlocked: false)
+        let service = ScreenTimeService(
+            defaults: UserDefaults(suiteName: "screen-time-\(UUID().uuidString)")!,
+            shield: shields,
+            sharedStore: FakeSharedStore(),
+            activityCenter: FakeDeviceActivityCenter()
+        )
+        return (service, shields)
+    }
+
     @Test func blockAllWithSettingOnPreventsAppDelete() {
-        let s = FakeScreenTimeService()
-        s.applyShieldOnAll(selection: FamilyActivitySelection(), blockAllPreventsAppDelete: true)
-        #expect(s.applyShieldOnAllCalled)
-        #expect(s.enablePreventAppDeleteCalled)
+        let (service, shields) = makeService()
+        service.blockAll(selection: TokenFixtures.selection(apps: [1]), blockAllPreventsAppDelete: true)
+        #expect(shields.currentShields().applications == [TokenFixtures.app(1)])
+        #expect(service.isAppDeleteDisabled)
     }
 
     @Test func blockAllWithSettingOffLeavesAppDeleteUntouched() {
-        let s = FakeScreenTimeService()
-        s.applyShieldOnAll(selection: FamilyActivitySelection(), blockAllPreventsAppDelete: false)
-        #expect(s.applyShieldOnAllCalled)
-        #expect(!s.enablePreventAppDeleteCalled)
-        #expect(!s.disablePreventAppDeleteCalled)
+        let (service, shields) = makeService()
+        service.enablePreventAppDelete()
+        service.blockAll(selection: TokenFixtures.selection(apps: [1]), blockAllPreventsAppDelete: false)
+        #expect(shields.currentShields().applications == [TokenFixtures.app(1)])
+        #expect(service.isAppDeleteDisabled)
     }
 
     @Test func unblockAllWithSettingOnAllowsAppDelete() {
-        let s = FakeScreenTimeService()
-        s.removeShieldOnAll(blockAllPreventsAppDelete: true)
-        #expect(s.removeShieldOnAllCalled)
-        #expect(s.disablePreventAppDeleteCalled)
+        let (service, shields) = makeService()
+        service.blockAll(selection: TokenFixtures.selection(apps: [1]), blockAllPreventsAppDelete: true)
+        service.unblockAll(blockAllPreventsAppDelete: true)
+        #expect(shields.currentShields().applications.isEmpty)
+        #expect(!service.isAppDeleteDisabled)
     }
 
     @Test func unblockAllWithSettingOffLeavesAppDeleteUntouched() {
-        let s = FakeScreenTimeService()
-        s.removeShieldOnAll(blockAllPreventsAppDelete: false)
-        #expect(s.removeShieldOnAllCalled)
-        #expect(!s.disablePreventAppDeleteCalled)
-        #expect(!s.enablePreventAppDeleteCalled)
+        let (service, shields) = makeService()
+        service.blockAll(selection: TokenFixtures.selection(apps: [1]), blockAllPreventsAppDelete: true)
+        service.unblockAll(blockAllPreventsAppDelete: false)
+        #expect(shields.currentShields().applications.isEmpty)
+        #expect(service.isAppDeleteDisabled)
+    }
+
+    @Test func blockStatusReflectsTheReconciledShield() {
+        let (service, _) = makeService()
+        service.blockAll(selection: TokenFixtures.selection(apps: [1, 2]), blockAllPreventsAppDelete: false)
+        service.unblock(selection: TokenFixtures.selection(apps: [2]))
+
+        #expect(service.blockStatus(selection: TokenFixtures.selection(apps: [1])) == .all)
+        #expect(service.blockStatus(selection: TokenFixtures.selection(apps: [1, 2])) == .some)
+        #expect(service.blockStatus(selection: TokenFixtures.selection(apps: [2])) == .none)
+        #expect(service.activeShieldCount() == 1)
     }
 
     @Test func notifyUpdateIncrementsCount() {

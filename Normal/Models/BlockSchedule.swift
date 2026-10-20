@@ -115,7 +115,18 @@ final class BlockSchedule: Identifiable {
         )
     }
 
-    func toDTO() -> ScheduleDTO? {
+    func hasSameRules(as dto: ScheduleDTO) -> Bool {
+        startHour == dto.startHour
+            && startMinute == dto.startMinute
+            && effectiveDurationMinutes == dto.durationMinutes
+            && weekdays == dto.weekdays
+            && shouldBlock == dto.shouldBlock
+            && isTimed == dto.isTimed
+            && customDomains == dto.customDomains
+            && (try? FamilyActivitySelection.fromData(dto.selectionData)) == selection
+    }
+
+    func toDTO(activatedAt: Date? = nil) -> ScheduleDTO? {
         guard let data = try? selection.toData() else { return nil }
         return ScheduleDTO(
             id: id,
@@ -127,7 +138,9 @@ final class BlockSchedule: Identifiable {
             weekdays: weekdays,
             shouldBlock: shouldBlock,
             isTimed: isTimed,
-            customDomains: customDomains
+            customDomains: customDomains,
+            isEnabled: isEnabled,
+            activatedAt: activatedAt
         )
     }
 }

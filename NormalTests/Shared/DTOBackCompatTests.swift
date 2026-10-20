@@ -26,6 +26,48 @@ struct DTOBackCompatTests {
         let isTimed: Bool
     }
 
+    private struct Version15ScheduleDTO: Codable {
+        let id: UUID
+        let name: String
+        let selectionData: Data
+        let startHour: Int
+        let startMinute: Int
+        let durationMinutes: Int
+        let weekdays: Set<Int>
+        let shouldBlock: Bool
+        let isTimed: Bool
+        let encodedCustomDomains: [String]?
+    }
+
+    @Test func scheduleDTODecodesVersion15BlobWithoutEnabledOrActivation() throws {
+        let legacy = Version15ScheduleDTO(
+            id: UUID(), name: "Mail", selectionData: Data(),
+            startHour: 12, startMinute: 0, durationMinutes: 180, weekdays: [1, 2],
+            shouldBlock: false, isTimed: true, encodedCustomDomains: ["a.com"]
+        )
+        let blob = try PropertyListEncoder().encode([legacy])
+
+        let decoded = try #require(try PropertyListDecoder().decode([ScheduleDTO].self, from: blob).first)
+        #expect(decoded.isEnabled == nil)
+        #expect(decoded.activatedAt == nil)
+        #expect(decoded.customDomains == ["a.com"])
+        #expect(decoded.isEffectivelyEnabled(monitoredActivities: [SharedConstants.scheduleActivityName(for: legacy.id)]))
+        #expect(!decoded.isEffectivelyEnabled(monitoredActivities: []))
+    }
+
+    @Test func scheduleDTORoundTripsEnabledAndActivation() throws {
+        let activated = Date(timeIntervalSince1970: 900)
+        let dto = ScheduleDTO(
+            id: UUID(), name: "S", selectionData: Data(),
+            startHour: 9, startMinute: 0, durationMinutes: 60, weekdays: [2],
+            shouldBlock: true, isTimed: true, isEnabled: false, activatedAt: activated
+        )
+        let decoded = try PropertyListDecoder().decode(ScheduleDTO.self, from: PropertyListEncoder().encode(dto))
+        #expect(decoded.isEnabled == false)
+        #expect(decoded.activatedAt == activated)
+        #expect(!decoded.isEffectivelyEnabled(monitoredActivities: [SharedConstants.scheduleActivityName(for: dto.id)]))
+    }
+
     @Test func timedUnblockDTODecodesLegacyBlobWithoutCustomDomains() throws {
         let legacy = LegacyTimedUnblockDTO(
             id: "main",

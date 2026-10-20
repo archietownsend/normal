@@ -6,7 +6,6 @@ final class AppBlockIntentPerformer: BlockIntentPerforming {
     private let container: ModelContainer
     private let screenTimeService: any ScreenTimeProviding
     private let timedUnblockService: TimedUnblockService
-    private let scheduleService: ScheduleService
     private let syncsExternalSurfaces: Bool
     private let logger = Logger(subsystem: "com.normalengineering.normal", category: "Intents")
 
@@ -14,13 +13,11 @@ final class AppBlockIntentPerformer: BlockIntentPerforming {
         container: ModelContainer,
         screenTimeService: any ScreenTimeProviding,
         timedUnblockService: TimedUnblockService,
-        scheduleService: ScheduleService,
         syncsExternalSurfaces: Bool = true
     ) {
         self.container = container
         self.screenTimeService = screenTimeService
         self.timedUnblockService = timedUnblockService
-        self.scheduleService = scheduleService
         self.syncsExternalSurfaces = syncsExternalSurfaces
     }
 
@@ -28,8 +25,7 @@ final class AppBlockIntentPerformer: BlockIntentPerforming {
         self.init(
             container: container,
             screenTimeService: services.screenTime,
-            timedUnblockService: services.timedUnblock,
-            scheduleService: services.schedule
+            timedUnblockService: services.timedUnblock
         )
     }
 
@@ -55,8 +51,7 @@ final class AppBlockIntentPerformer: BlockIntentPerforming {
             mainSelection: mainSelection,
             settings: settings,
             screenTimeService: screenTimeService,
-            timedUnblockService: timedUnblockService,
-            scheduleService: scheduleService
+            timedUnblockService: timedUnblockService
         )
         syncExternalSurfaces(settings: settings)
         return BlockOutcome(name: String(localized: "All Apps"), wasAlreadyBlocked: wasAlreadyBlocked)

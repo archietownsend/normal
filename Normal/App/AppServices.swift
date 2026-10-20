@@ -10,18 +10,17 @@ final class AppServices {
     let usageLimit: UsageLimitService
 
     init() {
-        let screenTime = ScreenTimeService()
-        self.screenTime = screenTime
-
         if UITestSupport.isActive {
             let center = UITestDeviceActivityCenter()
             let store = SharedStore(
                 defaults: UserDefaults(suiteName: "uitest-\(UUID().uuidString)")
             )
+            let screenTime = ScreenTimeService(sharedStore: store, activityCenter: center)
+            self.screenTime = screenTime
             timedUnblock = TimedUnblockService(
                 activityCenter: center,
                 sharedStore: store,
-                onExpiration: { screenTime.notifyUpdate() }
+                onExpiration: { screenTime.reconcile() }
             )
             schedule = ScheduleService(activityCenter: center, sharedStore: store)
             appReview = AppReviewService(
@@ -34,7 +33,9 @@ final class AppServices {
                 ledger: InMemoryUsageLimitLedger()
             )
         } else {
-            timedUnblock = TimedUnblockService(onExpiration: { screenTime.notifyUpdate() })
+            let screenTime = ScreenTimeService()
+            self.screenTime = screenTime
+            timedUnblock = TimedUnblockService(onExpiration: { screenTime.reconcile() })
             schedule = ScheduleService()
             appReview = AppReviewService()
             emergencyUnblock = EmergencyUnblockService(ledger: KeychainEmergencyUnblockLedger())

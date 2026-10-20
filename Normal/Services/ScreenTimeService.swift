@@ -1,3 +1,4 @@
+import DeviceActivity
 import FamilyControls
 import Foundation
 import Observation
@@ -10,16 +11,28 @@ final class ScreenTimeService: ScreenTimeProviding {
     var lastUpdate: Date = .now
 
     private let shield: ShieldStoring
+    private let sharedStore: any SharedStoreProviding
+    private let activityCenter: any DeviceActivityProviding
+    private let clock: () -> Date
     private let authCenter = AuthorizationCenter.shared
     private let defaults: UserDefaults
     private let logger = Logger(subsystem: "com.normalengineering.normal", category: "ScreenTime")
 
     private static let authorizedKey = "hasAuthorizedFamilyControls"
 
-    init(defaults: UserDefaults = .standard, shield: ShieldStoring? = nil) {
+    init(
+        defaults: UserDefaults = .standard,
+        shield: ShieldStoring? = nil,
+        sharedStore: any SharedStoreProviding = SharedStore(),
+        activityCenter: any DeviceActivityProviding = DeviceActivityCenter(),
+        clock: @escaping () -> Date = { .now }
+    ) {
         self.defaults = defaults
         self.shield = shield
             ?? (UITestSupport.isActive ? InMemoryShieldStore() : ManagedSettingsShieldStore())
+        self.sharedStore = sharedStore
+        self.activityCenter = activityCenter
+        self.clock = clock
     }
 
     var isAuthorizedNow: Bool {
@@ -72,52 +85,89 @@ final class ScreenTimeService: ScreenTimeProviding {
     }
 
     func enablePreventAppDelete() {
-        shield.denyAppRemoval = true
-        notifyUpdate()
+        reconcile { $0.setAppDeletionBlocked(true, at: clock()) }
     }
 
     func disablePreventAppDelete() {
-        shield.denyAppRemoval = false
-        notifyUpdate()
+        reconcile { $0.setAppDeletionBlocked(false, at: clock()) }
     }
 
-    func applyShieldOnAll(
+    func blockAll(
         selection: FamilyActivitySelection,
         customDomains: [String] = [],
         blockAllPreventsAppDelete: Bool
     ) {
-        shield.replace(with: selection, customDomains: customDomains)
-        if blockAllPreventsAppDelete {
-            shield.denyAppRemoval = true
+        reconcile { state in
+            let now = clock()
+            state.blockAll(selection, customDomains: customDomains, at: now)
+            if blockAllPreventsAppDelete {
+                state.setAppDeletionBlocked(true, at: now)
+            }
         }
-        notifyUpdate()
     }
 
-    func removeShieldOnAll(blockAllPreventsAppDelete: Bool) {
-        shield.clear()
-        if blockAllPreventsAppDelete {
-            shield.denyAppRemoval = false
+    func unblockAll(blockAllPreventsAppDelete: Bool) {
+        reconcile { state in
+            let now = clock()
+            state.unblockAll(at: now)
+            if blockAllPreventsAppDelete {
+                state.setAppDeletionBlocked(false, at: now)
+            }
         }
-        notifyUpdate()
+    }
+
+    func block(selection: FamilyActivitySelection, customDomains: [String] = []) {
+        reconcile { $0.block(selection, customDomains: customDomains, at: clock()) }
+    }
+
+    func unblock(selection: FamilyActivitySelection, customDomains: [String] = []) {
+        reconcile { $0.unblock(selection, customDomains: customDomains, at: clock()) }
+    }
+
+    func updateMainList(
+        from old: FamilyActivitySelection,
+        customDomains oldDomains: [String],
+        to new: FamilyActivitySelection,
+        customDomains newDomains: [String],
+        addedBlockedAsOf addedDate: Date
+    ) {
+        reconcile { state in
+            state.unblock(
+                old.subtracting(new),
+                customDomains: oldDomains.filter { !newDomains.contains($0) },
+                at: clock()
+            )
+            state.block(
+                new.subtracting(old),
+                customDomains: newDomains.filter { !oldDomains.contains($0) },
+                at: addedDate
+            )
+        }
     }
 
     func removeAllRestrictions() {
+        reconcile { state in
+            let now = clock()
+            state.unblockAll(at: now)
+            state.setAppDeletionBlocked(false, at: now)
+        }
         shield.clearAllSettings()
         notifyUpdate()
     }
 
-    func addToShields(selection: FamilyActivitySelection, customDomains: [String] = []) {
-        shield.union(with: selection, customDomains: customDomains)
-        notifyUpdate()
+    func reconcile() {
+        reconcile { _ in }
     }
 
-    func removeFromShields(selection: FamilyActivitySelection, customDomains: [String] = []) {
-        shield.subtract(with: selection, customDomains: customDomains)
-        notifyUpdate()
-    }
-
-    func clearCustomDomainFilter() {
-        shield.clearCustomDomainFilter()
+    private func reconcile(_ update: (inout ManualBlockState) -> Void) {
+        let plan = ShieldReconciler.reconcile(
+            sharedStore: sharedStore,
+            shields: shield,
+            monitoredActivities: activityCenter.monitoredActivityNames,
+            at: clock(),
+            update: update
+        )
+        CallbackLog.record("app reconcile: \(plan.map { "\($0.applications.count) apps" } ?? "skipped, data protected")")
         notifyUpdate()
     }
 

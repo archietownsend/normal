@@ -6,11 +6,9 @@ nonisolated protocol SharedStoreProviding: Sendable {
     func upsertTimedUnblock(_ unblock: TimedUnblockDTO)
     func removeTimedUnblock(id: String)
     func findTimedUnblock(activityName: String) -> TimedUnblockDTO?
-    func isMainTimedUnblockActive() -> Bool
     func saveSchedules(_ dtos: [ScheduleDTO])
     func loadSchedules() -> [ScheduleDTO]
     func isScheduleOverrideActive() -> Bool
-    func setScheduleOverrideActive(_ active: Bool)
     func loadScheduleOverrideSince() -> Date?
     func isCustomDomainsEnabled() -> Bool
     func setCustomDomainsEnabled(_ enabled: Bool)
@@ -24,39 +22,11 @@ nonisolated protocol SharedStoreProviding: Sendable {
     func loadUsageLimitsIntervalStart() -> Date?
     func saveUsageLimitConfig(_ config: UsageLimitConfig)
     func loadUsageLimitConfig() -> UsageLimitConfig
-}
-
-enum ScheduleStartDecision: Equatable {
-    case skip
-    case apply
+    func saveManualBlockState(_ state: ManualBlockState)
+    func loadManualBlockState() -> ManualBlockState?
 }
 
 extension SharedStoreProviding {
-    func isUnblockAllInEffect() -> Bool {
-        isMainTimedUnblockActive() || isScheduleOverrideActive()
-    }
-
-    func suppressesSchedule(windowStart: Date) -> Bool {
-        if isMainTimedUnblockActive() {
-            return true
-        }
-        guard isScheduleOverrideActive() else { return false }
-        guard let since = loadScheduleOverrideSince() else { return true }
-        return windowStart < since
-    }
-
-    func resolveScheduleStart(windowStart: Date) -> ScheduleStartDecision {
-        if isMainTimedUnblockActive() {
-            return .skip
-        }
-        guard isScheduleOverrideActive() else { return .apply }
-        if let since = loadScheduleOverrideSince(), windowStart < since {
-            return .skip
-        }
-        setScheduleOverrideActive(false)
-        return .apply
-    }
-
     var usagePeriod: UsagePeriod {
         loadUsageLimitConfig().period
     }

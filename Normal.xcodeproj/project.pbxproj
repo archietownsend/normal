@@ -81,6 +81,7 @@
 		2F4718A12F556F340013F94D /* Exceptions for "Shared" folder in "NormalMonitor" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				CallbackLog.swift,
 				CustomDomainFilter.swift,
 				DailyLimitEnforcement.swift,
 				DataExtension.swift,
@@ -90,6 +91,8 @@
 				SharedDTO.swift,
 				SharedStore.swift,
 				SharedStoreProviding.swift,
+				ShieldReconciler.swift,
+				ShieldResolver.swift,
 				UsageDTO.swift,
 			);
 			target = 2F4718642F5569C90013F94D /* NormalMonitor */;
@@ -171,10 +174,12 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				DataExtension.swift,
+				DomainNormalizer.swift,
 				SharedConstants.swift,
 				SharedDTO.swift,
 				SharedStore.swift,
 				SharedStoreProviding.swift,
+				ShieldResolver.swift,
 				UsageDTO.swift,
 			);
 			target = 2FDA0000000000000000B003 /* NormalShield */;

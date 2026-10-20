@@ -42,9 +42,7 @@ struct AppContainer: View {
             .task { mirrorCustomDomainsEnabled() }
             .onChange(of: allSettings.first?.enableCustomDomains ?? false) { _, enabled in
                 scheduleService.mirrorCustomDomainsEnabled(enabled)
-                if !enabled {
-                    screenTimeService.clearCustomDomainFilter()
-                }
+                screenTimeService.reconcile()
             }
     }
 

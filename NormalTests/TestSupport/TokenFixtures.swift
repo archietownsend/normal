@@ -7,9 +7,19 @@ nonisolated enum TokenFixtures {
         decode(id)
     }
 
-    static func selection(apps: [UInt8]) -> FamilyActivitySelection {
+    static func category(_ id: UInt8) -> ActivityCategoryToken {
+        decode(id)
+    }
+
+    static func webDomain(_ id: UInt8) -> WebDomainToken {
+        decode(id)
+    }
+
+    static func selection(apps: [UInt8], categories: [UInt8] = [], webDomains: [UInt8] = []) -> FamilyActivitySelection {
         var selection = FamilyActivitySelection()
         selection.applicationTokens = Set(apps.map(app))
+        selection.categoryTokens = Set(categories.map(category))
+        selection.webDomainTokens = Set(webDomains.map(webDomain))
         return selection
     }
 

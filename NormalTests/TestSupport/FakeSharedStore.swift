@@ -10,6 +10,8 @@ final class FakeSharedStore: SharedStoreProviding, @unchecked Sendable {
     var usageLimits: [UsageLimitDTO] = []
     var usageDayState: UsageDayStateDTO = .empty
     var usageRegistration: String?
+    var manualBlockState: ManualBlockState?
+    private(set) var manualBlockStateSaveCount = 0
 
     func loadTimedUnblocks() -> [TimedUnblockDTO] {
         timedUnblocks
@@ -32,11 +34,6 @@ final class FakeSharedStore: SharedStoreProviding, @unchecked Sendable {
         timedUnblocks.first { $0.activityName == activityName }
     }
 
-    func isMainTimedUnblockActive() -> Bool {
-        guard let main = timedUnblocks.first(where: { $0.id == "main" }) else { return false }
-        return main.endDate > .now
-    }
-
     func saveSchedules(_ dtos: [ScheduleDTO]) {
         schedules = dtos
     }
@@ -47,11 +44,6 @@ final class FakeSharedStore: SharedStoreProviding, @unchecked Sendable {
 
     func isScheduleOverrideActive() -> Bool {
         scheduleOverrideActive
-    }
-
-    func setScheduleOverrideActive(_ active: Bool) {
-        scheduleOverrideActive = active
-        scheduleOverrideSince = active ? .now : nil
     }
 
     func loadScheduleOverrideSince() -> Date? {
@@ -106,5 +98,14 @@ final class FakeSharedStore: SharedStoreProviding, @unchecked Sendable {
 
     func loadUsageLimitConfig() -> UsageLimitConfig {
         usageLimitConfig
+    }
+
+    func saveManualBlockState(_ state: ManualBlockState) {
+        manualBlockState = state
+        manualBlockStateSaveCount += 1
+    }
+
+    func loadManualBlockState() -> ManualBlockState? {
+        manualBlockState
     }
 }

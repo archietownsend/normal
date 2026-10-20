@@ -8,30 +8,38 @@ import Observation
 final class ScheduleService {
     private let activityCenter: any DeviceActivityProviding
     private let sharedStore: any SharedStoreProviding
+    private let clock: () -> Date
 
     init(
         activityCenter: any DeviceActivityProviding = DeviceActivityCenter(),
-        sharedStore: any SharedStoreProviding = SharedStore()
+        sharedStore: any SharedStoreProviding = SharedStore(),
+        clock: @escaping () -> Date = { .now }
     ) {
         self.activityCenter = activityCenter
         self.sharedStore = sharedStore
+        self.clock = clock
     }
 
-    func sync(
-        _ schedule: BlockSchedule,
-        screenTimeService: any ScreenTimeProviding
-    ) throws {
+    func sync(_ schedule: BlockSchedule) throws {
         let activityName = activityName(for: schedule)
         activityCenter.stopMonitoring([activityName])
 
         guard schedule.isEnabled else {
-            liftBlockIfNeeded(schedule, screenTimeService: screenTimeService)
+            CallbackLog.record("app sync \"\(schedule.name)\": stopped (disabled)")
             return
         }
 
         let deviceSchedule = makeDeviceSchedule(for: schedule)
-        try activityCenter.startMonitoring(activityName, during: deviceSchedule, events: [:])
-        applyIfActiveNow(schedule, screenTimeService: screenTimeService)
+        do {
+            try activityCenter.startMonitoring(activityName, during: deviceSchedule, events: [:])
+        } catch DeviceActivityCenter.MonitoringError.excessiveActivities {
+            CallbackLog.record("app sync \"\(schedule.name)\": too many activities")
+            throw ScheduleRegistrationError.tooManyActivities
+        } catch {
+            CallbackLog.record("app sync \"\(schedule.name)\": startMonitoring failed: \(error)")
+            throw error
+        }
+        CallbackLog.record("app sync \"\(schedule.name)\": stopped + restarted")
     }
 
     func registerAll(
@@ -39,9 +47,21 @@ final class ScheduleService {
         screenTimeService: any ScreenTimeProviding
     ) {
         syncAllToSharedStore(schedules)
-        for schedule in schedules where schedule.isEnabled {
-            try? sync(schedule, screenTimeService: screenTimeService)
+        let wanted = Set(schedules.filter(\.isEnabled).map { activityName(for: $0).rawValue })
+        let stale = activityCenter.monitoredActivityNames.filter { $0.hasPrefix("schedule_") && !wanted.contains($0) }
+        if !stale.isEmpty {
+            activityCenter.stopMonitoring(stale.map { DeviceActivityName($0) })
         }
+        activityCenter.syncHeartbeat(sharedStore: sharedStore, at: clock())
+        for schedule in schedules where schedule.isEnabled && !isRegistered(schedule) {
+            try? sync(schedule)
+        }
+        screenTimeService.reconcile()
+    }
+
+    private func isRegistered(_ schedule: BlockSchedule) -> Bool {
+        activityCenter.registeredSchedule(for: activityName(for: schedule))?
+            .hasSameWindow(as: makeDeviceSchedule(for: schedule)) == true
     }
 
     func mirrorCustomDomainsEnabled(_ enabled: Bool) {
@@ -50,22 +70,22 @@ final class ScheduleService {
 
     func remove(
         _ schedule: BlockSchedule,
+        remaining: [BlockSchedule],
         screenTimeService: any ScreenTimeProviding
     ) {
         activityCenter.stopMonitoring([activityName(for: schedule)])
-        liftBlockIfNeeded(schedule, screenTimeService: screenTimeService)
+        syncAllToSharedStore(remaining)
+        activityCenter.syncHeartbeat(sharedStore: sharedStore, at: clock())
+        screenTimeService.reconcile()
     }
 
     func toggleEnabled(
         _ schedule: BlockSchedule,
+        allSchedules: [BlockSchedule],
         screenTimeService: any ScreenTimeProviding
     ) throws {
         schedule.isEnabled.toggle()
-        try sync(schedule, screenTimeService: screenTimeService)
-    }
-
-    func setScheduleOverride(_ active: Bool) {
-        sharedStore.setScheduleOverrideActive(active)
+        try syncAndPersist(schedule, allSchedules: allSchedules, screenTimeService: screenTimeService)
     }
 
     func disableAll(
@@ -76,13 +96,21 @@ final class ScheduleService {
             schedule.isEnabled = false
         }
         for schedule in schedules {
-            try? sync(schedule, screenTimeService: screenTimeService)
+            try? sync(schedule)
         }
         syncAllToSharedStore(schedules)
+        activityCenter.syncHeartbeat(sharedStore: sharedStore, at: clock())
+        screenTimeService.reconcile()
     }
 
-    func syncAllToSharedStore(_ schedules: [BlockSchedule]) {
-        sharedStore.saveSchedules(schedules.compactMap { $0.toDTO() })
+    func syncAllToSharedStore(_ schedules: [BlockSchedule], activating activatedID: UUID? = nil) {
+        var previous: [UUID: Date] = [:]
+        for dto in sharedStore.loadSchedules() {
+            previous[dto.id] = dto.activatedAt
+        }
+        sharedStore.saveSchedules(schedules.compactMap { schedule in
+            schedule.toDTO(activatedAt: schedule.id == activatedID ? clock() : previous[schedule.id])
+        })
     }
 
     func syncAndPersist(
@@ -90,42 +118,18 @@ final class ScheduleService {
         allSchedules: [BlockSchedule],
         screenTimeService: any ScreenTimeProviding
     ) throws {
-        try sync(schedule, screenTimeService: screenTimeService)
-        syncAllToSharedStore(allSchedules)
+        let previous = sharedStore.loadSchedules().first { $0.id == schedule.id }
+        let wasEnabled = previous?.isEffectivelyEnabled(monitoredActivities: activityCenter.monitoredActivityNames) == true
+        let rulesChanged = previous.map { !schedule.hasSameRules(as: $0) } ?? true
+        let activates = schedule.isEnabled && (!wasEnabled || (schedule.isTimed && rulesChanged))
+        syncAllToSharedStore(allSchedules, activating: activates ? schedule.id : nil)
+        screenTimeService.reconcile()
+        activityCenter.syncHeartbeat(sharedStore: sharedStore, at: clock())
+        try sync(schedule)
     }
 
     private func activityName(for schedule: BlockSchedule) -> DeviceActivityName {
         DeviceActivityName(SharedConstants.scheduleActivityName(for: schedule.id))
-    }
-
-    private func applyIfActiveNow(
-        _ schedule: BlockSchedule,
-        screenTimeService: any ScreenTimeProviding
-    ) {
-        guard let windowStart = schedule.activeWindowStart(at: .now) else { return }
-        let domains = effectiveDomains(schedule)
-        if schedule.shouldBlock {
-            guard !sharedStore.suppressesSchedule(windowStart: windowStart) else { return }
-            let exclusion = ShieldExclusion.groupUnblocks(sharedStore.loadTimedUnblocks(), at: .now)
-            screenTimeService.addToShields(
-                selection: exclusion.applied(to: schedule.selection),
-                customDomains: exclusion.applied(to: domains)
-            )
-        } else {
-            screenTimeService.removeFromShields(selection: schedule.selection, customDomains: domains)
-        }
-    }
-
-    private func liftBlockIfNeeded(
-        _ schedule: BlockSchedule,
-        screenTimeService: any ScreenTimeProviding
-    ) {
-        guard schedule.shouldBlock else { return }
-        screenTimeService.removeFromShields(selection: schedule.selection, customDomains: effectiveDomains(schedule))
-    }
-
-    private func effectiveDomains(_ schedule: BlockSchedule) -> [String] {
-        sharedStore.isCustomDomainsEnabled() ? schedule.customDomains : []
     }
 
     private func makeDeviceSchedule(for schedule: BlockSchedule) -> DeviceActivitySchedule {
@@ -143,5 +147,13 @@ final class ScheduleService {
         end.second = endSeconds % 60
 
         return DeviceActivitySchedule(intervalStart: start, intervalEnd: end, repeats: true)
+    }
+}
+
+enum ScheduleRegistrationError: LocalizedError {
+    case tooManyActivities
+
+    var errorDescription: String? {
+        String(localized: "Saved, but iOS only tracks 20 schedules and timers at once, so this schedule may start or end up to 30 minutes late. Turn off another schedule to make it exact.")
     }
 }

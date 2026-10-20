@@ -21,7 +21,7 @@ struct TimedUnblockServiceTests {
         return (service, activity, store)
     }
 
-    @Test func startMainRemovesShieldAndPersists() throws {
+    @Test func startMainPersistsAndReconciles() throws {
         let (service, activity, store) = makeService()
         let screenTime = FakeScreenTimeService()
 
@@ -31,7 +31,7 @@ struct TimedUnblockServiceTests {
             screenTimeService: screenTime
         )
 
-        #expect(screenTime.removeShieldOnAllCalled)
+        #expect(screenTime.reconcileCallCount == 1)
         #expect(activity.startCalls.map(\.name.rawValue) == [
             SharedConstants.mainTimedUnblockActivityName,
             SharedConstants.reblockHeartbeatActivityName,
@@ -40,7 +40,7 @@ struct TimedUnblockServiceTests {
         #expect(service.isMainUnblockActive)
     }
 
-    @Test func startGroupRemovesFromShieldsAndPersists() throws {
+    @Test func startGroupPersistsAndReconciles() throws {
         let (service, activity, store) = makeService()
         let screenTime = FakeScreenTimeService()
         let groupId = UUID()
@@ -52,7 +52,7 @@ struct TimedUnblockServiceTests {
             screenTimeService: screenTime
         )
 
-        #expect(screenTime.removeFromShieldsCalled)
+        #expect(screenTime.reconcileCallCount == 1)
         #expect(activity.startCalls.map(\.name.rawValue) == [
             SharedConstants.groupTimedUnblockActivityName(for: groupId),
             SharedConstants.reblockHeartbeatActivityName,
@@ -83,7 +83,7 @@ struct TimedUnblockServiceTests {
             )
         }
 
-        #expect(!screenTime.removeShieldOnAllCalled)
+        #expect(!screenTime.unblockAllCalled)
         #expect(!service.isMainUnblockActive)
         #expect(service.isGroupUnblockActive(groupId: groupId))
         #expect(store.timedUnblocks.map(\.id) == [groupId.uuidString])
@@ -104,7 +104,7 @@ struct TimedUnblockServiceTests {
             )
         }
 
-        #expect(!screenTime.removeFromShieldsCalled)
+        #expect(!screenTime.unblockCalled)
         #expect(!service.isGroupUnblockActive(groupId: groupId))
         #expect(store.timedUnblocks.isEmpty)
     }
@@ -137,7 +137,7 @@ struct TimedUnblockServiceTests {
         )
         let mainStart = try #require(store.timedUnblocks.first?.startDate)
 
-        service.updateMainSelection(FamilyActivitySelection(), customDomains: ["x.com"])
+        service.updateMainSelection(FamilyActivitySelection(), customDomains: ["x.com"], screenTimeService: FakeScreenTimeService())
 
         let updated = try #require(store.timedUnblocks.first { $0.id == TimedUnblockService.mainID })
         #expect(updated.startDate == mainStart)
@@ -186,12 +186,12 @@ struct TimedUnblockServiceTests {
             blockAllPreventsAppDelete: false
         )
 
-        #expect(screenTime.applyShieldOnAllCalled)
+        #expect(screenTime.blockAllCalled)
         #expect(store.timedUnblocks.isEmpty)
         #expect(!service.isMainUnblockActive)
     }
 
-    @Test func cancelGroupReinstatesShieldsAndForgets() throws {
+    @Test func cancelGroupForgetsTheUnblock() throws {
         let (service, _, store) = makeService()
         let screenTime = FakeScreenTimeService()
         let groupId = UUID()
@@ -202,30 +202,10 @@ struct TimedUnblockServiceTests {
             selection: FamilyActivitySelection(),
             screenTimeService: screenTime
         )
-        service.cancelGroup(
-            groupId: groupId,
-            selection: FamilyActivitySelection(),
-            screenTimeService: screenTime
-        )
+        service.cancelGroup(groupId: groupId)
 
-        #expect(screenTime.addToShieldsCalled)
         #expect(store.timedUnblocks.isEmpty)
         #expect(!service.isGroupUnblockActive(groupId: groupId))
-    }
-
-    @Test func startMainClearsPermanentScheduleOverride() throws {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        store.setScheduleOverrideActive(true)
-
-        try service.startMain(
-            duration: .fifteenMinutes,
-            selection: FamilyActivitySelection(),
-            screenTimeService: screenTime
-        )
-
-        #expect(!store.isScheduleOverrideActive(),
-                "A timed unblock supersedes a permanent override; its own window guard takes over")
     }
 
     @Test func startMainCancelsExistingGroupUnblocks() throws {
@@ -329,7 +309,7 @@ struct TimedUnblockServiceTests {
         )
         let originalEnd = store.timedUnblocks.first?.endDate
 
-        service.updateMainSelection(FamilyActivitySelection())
+        service.updateMainSelection(FamilyActivitySelection(), screenTimeService: FakeScreenTimeService())
 
         #expect(store.timedUnblocks.first?.endDate == originalEnd)
     }
@@ -391,10 +371,13 @@ struct TimedUnblockServiceTests {
     @Test func reconcileStopsHeartbeatOnceNoUnblocksRemain() {
         let (service, activity, store) = makeService()
         store.timedUnblocks = [expiredMainDTO()]
+        let heartbeat = DeviceActivityName(SharedConstants.reblockHeartbeatActivityName)
+        try? activity.startMonitoring(heartbeat, during: DeviceActivityScheduleFactory.heartbeat(), events: [:])
+        activity.startCalls.removeAll()
 
         service.reconcile(screenTimeService: FakeScreenTimeService())
 
-        #expect(activity.stopCalls.last == [DeviceActivityName(SharedConstants.reblockHeartbeatActivityName)])
+        #expect(activity.stopCalls.last == [heartbeat])
         #expect(!activity.startCalls.map(\.name.rawValue).contains(SharedConstants.reblockHeartbeatActivityName))
     }
 
@@ -414,7 +397,7 @@ struct TimedUnblockServiceTests {
         #expect(activity.startCalls.last?.schedule == DeviceActivityScheduleFactory.heartbeat())
     }
 
-    @Test func reconcileReblocksUnblockThatExpiredWhileAppWasDead() {
+    @Test func reconcileDropsUnblockThatExpiredWhileAppWasDeadAndReconciles() {
         let store = FakeSharedStore()
         store.timedUnblocks = [expiredMainDTO()]
         let screenTime = FakeScreenTimeService()
@@ -427,27 +410,11 @@ struct TimedUnblockServiceTests {
 
         service.reconcile(screenTimeService: screenTime)
 
-        #expect(screenTime.applyShieldOnAllCalled)
+        #expect(screenTime.reconcileCallCount == 1)
         #expect(store.timedUnblocks.isEmpty)
     }
 
-    @Test func reconcilePropagatesPreventAppDeleteWhenReblocking() {
-        let store = FakeSharedStore()
-        store.timedUnblocks = [expiredMainDTO(blockAllPreventsAppDelete: true)]
-        let screenTime = FakeScreenTimeService()
-
-        let service = TimedUnblockService(
-            activityCenter: FakeDeviceActivityCenter(),
-            sharedStore: store,
-            onExpiration: {}
-        )
-
-        service.reconcile(screenTimeService: screenTime)
-
-        #expect(screenTime.applyShieldOnAllBlockAllPreventsAppDelete == true)
-    }
-
-    @Test func reconcileReblocksExpiredGroupViaUnion() throws {
+    @Test func reconcileDropsExpiredGroupAndReconciles() throws {
         let store = FakeSharedStore()
         let groupId = UUID()
         store.timedUnblocks = try [TimedUnblockDTO(
@@ -467,8 +434,7 @@ struct TimedUnblockServiceTests {
 
         service.reconcile(screenTimeService: screenTime)
 
-        #expect(screenTime.addToShieldsCalled)
-        #expect(!screenTime.applyShieldOnAllCalled)
+        #expect(screenTime.reconcileCallCount == 1)
         #expect(store.timedUnblocks.isEmpty)
     }
 
@@ -501,7 +467,7 @@ struct TimedUnblockServiceTests {
 
         service.reconcile(screenTimeService: screenTime)
 
-        #expect(!screenTime.addToShieldsCalled)
+        #expect(!screenTime.blockCalled)
         #expect(service.isMainUnblockActive)
         #expect(store.timedUnblocks.map(\.id) == [TimedUnblockService.mainID])
     }
@@ -525,7 +491,7 @@ struct TimedUnblockServiceTests {
 
         service.reconcile(screenTimeService: screenTime)
 
-        #expect(!screenTime.applyShieldOnAllCalled)
+        #expect(!screenTime.blockAllCalled)
         #expect(service.isMainUnblockActive)
         #expect(store.timedUnblocks.count == 1)
     }
@@ -578,11 +544,7 @@ struct TimedUnblockServiceTests {
 
         try startGroup(service, screenTime, groupA)
         try startGroup(service, screenTime, groupB)
-        service.cancelGroup(
-            groupId: groupA,
-            selection: FamilyActivitySelection(),
-            screenTimeService: screenTime
-        )
+        service.cancelGroup(groupId: groupA)
 
         #expect(!service.isGroupUnblockActive(groupId: groupA))
         #expect(service.isGroupUnblockActive(groupId: groupB))
@@ -666,11 +628,7 @@ struct TimedUnblockServiceTests {
         try startGroup(service, screenTime, groupB)
         let endBBefore = try #require(service.groupUnblockEndDate(groupId: groupB))
 
-        service.cancelGroup(
-            groupId: groupA,
-            selection: FamilyActivitySelection(),
-            screenTimeService: screenTime
-        )
+        service.cancelGroup(groupId: groupA)
 
         #expect(service.groupUnblockEndDate(groupId: groupB) == endBBefore)
     }
@@ -738,31 +696,7 @@ struct TimedUnblockServiceTests {
             screenTimeService: screenTime
         )
 
-        #expect(screenTime.removeShieldOnAllBlockAllPreventsAppDelete == true)
         #expect(store.timedUnblocks.first?.blockAllPreventsAppDelete == true)
-    }
-
-    @Test func reapplyShieldUsesPersistedCustomDomainsForGroup() {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        let groupId = UUID()
-
-        // Seed an already-expired group unblock carrying custom domains.
-        store.timedUnblocks = [
-            TimedUnblockDTO(
-                id: groupId.uuidString,
-                selectionData: (try? FamilyActivitySelection().toData()) ?? Data(),
-                endDate: .now.addingTimeInterval(-60),
-                activityName: SharedConstants.groupTimedUnblockActivityName(for: groupId),
-                isGroupUnblock: true,
-                customDomains: ["x.com"]
-            ),
-        ]
-
-        service.reconcile(screenTimeService: screenTime)
-
-        #expect(screenTime.addToShieldsCalled)
-        #expect(screenTime.addToShieldsCustomDomains == ["x.com"])
     }
 
     @Test func editingGroupDomainsDuringUnblockUpdatesReblockPayload() throws {
@@ -788,26 +722,6 @@ struct TimedUnblockServiceTests {
         #expect(dto?.endDate == endDate, "Editing must not disturb the unblock's expiry")
     }
 
-    @Test func reapplyShieldUsesPersistedCustomDomainsForMain() {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-
-        store.timedUnblocks = [
-            TimedUnblockDTO(
-                id: TimedUnblockService.mainID,
-                selectionData: (try? FamilyActivitySelection().toData()) ?? Data(),
-                endDate: .now.addingTimeInterval(-60),
-                activityName: SharedConstants.mainTimedUnblockActivityName,
-                isGroupUnblock: false,
-                customDomains: ["reddit.com"]
-            ),
-        ]
-
-        service.reconcile(screenTimeService: screenTime)
-
-        #expect(screenTime.applyShieldOnAllCalled)
-        #expect(screenTime.applyShieldOnAllCustomDomains == ["reddit.com"])
-    }
 }
 
 @MainActor

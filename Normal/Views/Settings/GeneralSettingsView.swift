@@ -17,6 +17,11 @@ struct GeneralSettingsView: View {
             customDomainsSection
             appearanceSection
             aboutSection
+            #if DEBUG
+                Section("Debug") {
+                    NavigationLink("Callback Log") { CallbackLogView() }
+                }
+            #endif
         }
     }
 

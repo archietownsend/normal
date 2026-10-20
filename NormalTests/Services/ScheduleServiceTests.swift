@@ -6,14 +6,20 @@ import Testing
 
 @MainActor
 struct ScheduleServiceTests {
-    private func makeService() -> (
+    private struct TestError: Error {}
+
+    private nonisolated final class Clock {
+        var now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+    }
+
+    private func makeService(clock: Clock = Clock()) -> (
         service: ScheduleService,
         activity: FakeDeviceActivityCenter,
         store: FakeSharedStore
     ) {
         let activity = FakeDeviceActivityCenter()
         let store = FakeSharedStore()
-        return (ScheduleService(activityCenter: activity, sharedStore: store), activity, store)
+        return (ScheduleService(activityCenter: activity, sharedStore: store, clock: { clock.now }), activity, store)
     }
 
     private func makeSchedule(
@@ -34,76 +40,120 @@ struct ScheduleServiceTests {
 
     @Test func enabledScheduleStartsMonitoring() throws {
         let (service, activity, _) = makeService()
-        let screenTime = FakeScreenTimeService()
-        let schedule = makeSchedule(isEnabled: true)
 
-        try service.sync(schedule, screenTimeService: screenTime)
+        try service.sync(makeSchedule(isEnabled: true))
 
         #expect(activity.startCalls.count == 1)
         #expect(activity.stopCalls.count == 1)
     }
 
-    @Test func disabledBlockingScheduleRemovesFromShields() throws {
-        let (service, _, _) = makeService()
-        let screenTime = FakeScreenTimeService()
-        let schedule = makeSchedule(shouldBlock: true, isEnabled: false)
+    @Test func disabledScheduleOnlyStopsMonitoring() throws {
+        let (service, activity, _) = makeService()
 
-        try service.sync(schedule, screenTimeService: screenTime)
+        try service.sync(makeSchedule(isEnabled: false))
 
-        #expect(screenTime.removeFromShieldsCalled)
+        #expect(activity.startCalls.isEmpty)
+        #expect(activity.stopCalls.count == 1)
     }
 
-    @Test func disabledUnblockScheduleDoesNotBlock() throws {
-        let (service, _, _) = makeService()
-        let screenTime = FakeScreenTimeService()
-        let schedule = makeSchedule(shouldBlock: false, isEnabled: false)
+    @Test func startMonitoringFailureIsThrown() {
+        let (service, activity, _) = makeService()
+        activity.startError = TestError()
 
-        try service.sync(schedule, screenTimeService: screenTime)
-
-        #expect(!screenTime.addToShieldsCalled)
+        #expect(throws: (any Error).self) { try service.sync(makeSchedule()) }
     }
 
-    @Test func removeBlockingScheduleRemovesFromShields() {
-        let (service, _, _) = makeService()
+    @Test func removeStopsMonitoringPersistsRemainingAndReconciles() {
+        let (service, activity, store) = makeService()
         let screenTime = FakeScreenTimeService()
-        let schedule = makeSchedule(shouldBlock: true)
+        let removed = makeSchedule()
+        let kept = makeSchedule()
 
-        service.remove(schedule, screenTimeService: screenTime)
+        service.remove(removed, remaining: [kept], screenTimeService: screenTime)
 
-        #expect(screenTime.removeFromShieldsCalled)
+        #expect(activity.stopCalls.last == [DeviceActivityName(SharedConstants.scheduleActivityName(for: removed.id))])
+        #expect(store.schedules.map(\.id) == [kept.id])
+        #expect(screenTime.reconcileCallCount == 1)
     }
 
-    @Test func removeUnblockingScheduleDoesNotBlock() {
-        let (service, _, _) = makeService()
-        let screenTime = FakeScreenTimeService()
-        let schedule = makeSchedule(shouldBlock: false)
-
-        service.remove(schedule, screenTimeService: screenTime)
-
-        #expect(!screenTime.addToShieldsCalled)
-    }
-
-    @Test func toggleEnabledFlipsState() throws {
-        let (service, _, _) = makeService()
+    @Test func toggleEnabledFlipsStatePersistsAndReconciles() throws {
+        let (service, _, store) = makeService()
         let screenTime = FakeScreenTimeService()
         let schedule = makeSchedule(isEnabled: true)
 
-        try service.toggleEnabled(schedule, screenTimeService: screenTime)
+        try service.toggleEnabled(schedule, allSchedules: [schedule], screenTimeService: screenTime)
         #expect(!schedule.isEnabled)
+        #expect(store.schedules.first?.isEnabled == false)
 
-        try service.toggleEnabled(schedule, screenTimeService: screenTime)
+        try service.toggleEnabled(schedule, allSchedules: [schedule], screenTimeService: screenTime)
         #expect(schedule.isEnabled)
+        #expect(store.schedules.first?.isEnabled == true)
+        #expect(screenTime.reconcileCallCount == 2)
+    }
+
+    @Test func toggleEnabledPersistsEvenWhenMonitoringFails() {
+        let (service, activity, store) = makeService()
+        activity.startError = TestError()
+        let schedule = makeSchedule(isEnabled: false)
+
+        #expect(throws: (any Error).self) {
+            try service.toggleEnabled(schedule, allSchedules: [schedule], screenTimeService: FakeScreenTimeService())
+        }
+        #expect(store.schedules.first?.isEnabled == true)
     }
 
     @Test func syncAllToSharedStorePersistsDTOs() {
         let (service, _, store) = makeService()
-        let schedule = makeSchedule()
-        service.syncAllToSharedStore([schedule])
+        service.syncAllToSharedStore([makeSchedule()])
         #expect(store.schedules.count == 1)
         #expect(store.schedules.first?.startHour == 9)
+        #expect(store.schedules.first?.isEnabled == true)
     }
 
-    @Test func registerAllReRegistersEnabledOnlyAndPersistsAll() {
+    @Test func savingAnEnabledScheduleStampsActivationAndKeepsOthers() throws {
+        let clock = Clock()
+        let (service, _, store) = makeService(clock: clock)
+        let first = makeSchedule()
+        let second = makeSchedule()
+        let firstSaved = clock.now
+        try service.syncAndPersist(first, allSchedules: [first], screenTimeService: FakeScreenTimeService())
+
+        clock.now = clock.now.addingTimeInterval(3600)
+        try service.syncAndPersist(second, allSchedules: [first, second], screenTimeService: FakeScreenTimeService())
+        service.syncAllToSharedStore([second, first])
+
+        let saved = Dictionary(uniqueKeysWithValues: store.schedules.map { ($0.id, $0.activatedAt) })
+        #expect(saved[first.id] == firstSaved)
+        #expect(saved[second.id] == clock.now)
+    }
+
+    @Test func resavingAnEnabledUntimedScheduleKeepsItsActivation() throws {
+        let clock = Clock()
+        let (service, _, store) = makeService(clock: clock)
+        let permanent = BlockSchedule(
+            name: "P", selection: FamilyActivitySelection(),
+            startHour: 9, startMinute: 0, durationMinutes: 15, weekdays: [1],
+            shouldBlock: true, isTimed: false, isEnabled: true
+        )
+        let activated = clock.now
+        try service.syncAndPersist(permanent, allSchedules: [permanent], screenTimeService: FakeScreenTimeService())
+
+        clock.now = clock.now.addingTimeInterval(3600)
+        try service.syncAndPersist(permanent, allSchedules: [permanent], screenTimeService: FakeScreenTimeService())
+
+        #expect(store.schedules.first?.activatedAt == activated)
+    }
+
+    @Test func savingADisabledScheduleDoesNotStampActivation() throws {
+        let (service, _, store) = makeService()
+        let schedule = makeSchedule(isEnabled: false)
+
+        try service.syncAndPersist(schedule, allSchedules: [schedule], screenTimeService: FakeScreenTimeService())
+
+        #expect(store.schedules.first?.activatedAt == nil)
+    }
+
+    @Test func registerAllReRegistersEnabledOnlyPersistsAllAndReconciles() {
         let (service, activity, store) = makeService()
         let screenTime = FakeScreenTimeService()
         let enabled = makeSchedule(isEnabled: true)
@@ -111,134 +161,141 @@ struct ScheduleServiceTests {
 
         service.registerAll([enabled, disabled], screenTimeService: screenTime)
 
-        #expect(store.schedules.count == 2, "All schedules persisted to the shared store")
-        #expect(activity.startCalls.count == 1, "Only the enabled schedule is (re)registered")
+        #expect(store.schedules.count == 2)
+        #expect(activity.startCalls.map(\.name.rawValue).filter { $0.hasPrefix("schedule_") }
+            == [SharedConstants.scheduleActivityName(for: enabled.id)])
+        #expect(screenTime.reconcileCallCount == 1)
     }
 
-    // MARK: - "Unblock all" overrides
-
-    private func activeNowSchedule(shouldBlock: Bool = true) -> BlockSchedule {
-        let now = Date()
-        let calendar = Calendar.current
-        return BlockSchedule(
-            name: "ActiveNow",
-            selection: FamilyActivitySelection(),
-            startHour: calendar.component(.hour, from: now),
-            startMinute: 0,
-            durationMinutes: 120,
-            weekdays: [calendar.component(.weekday, from: now)],
-            shouldBlock: shouldBlock,
-            isTimed: true,
-            isEnabled: true
-        )
+    private var heartbeatName: String {
+        SharedConstants.reblockHeartbeatActivityName
     }
 
-    private func activeMainUnblock() -> TimedUnblockDTO {
-        try! TimedUnblockDTO(
+    @Test func registerAllLeavesUnchangedRegistrationsAlone() throws {
+        let (service, activity, _) = makeService()
+        let schedule = makeSchedule()
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+        activity.startCalls.removeAll()
+        activity.stopCalls.removeAll()
+
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+
+        #expect(activity.startCalls.isEmpty)
+        #expect(activity.stopCalls.isEmpty)
+    }
+
+    @Test func registerAllReRegistersWhenTheWindowChanged() throws {
+        let (service, activity, _) = makeService()
+        let schedule = makeSchedule()
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+        activity.startCalls.removeAll()
+
+        schedule.startHour = 10
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+
+        #expect(activity.startCalls.map(\.name.rawValue) == [SharedConstants.scheduleActivityName(for: schedule.id)])
+        #expect(activity.startCalls.first?.schedule.intervalStart.hour == 10)
+    }
+
+    @Test func registerAllRegistersSchedulesIOSDropped() throws {
+        let (service, activity, _) = makeService()
+        let schedule = makeSchedule()
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+        activity.registeredSchedules.removeAll()
+        activity.monitoredActivityNames.removeAll()
+        activity.startCalls.removeAll()
+
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+
+        #expect(activity.startCalls.map(\.name.rawValue).contains(SharedConstants.scheduleActivityName(for: schedule.id)))
+    }
+
+    @Test func registerAllStopsOrphanedScheduleActivities() {
+        let (service, activity, _) = makeService()
+        let orphan = SharedConstants.scheduleActivityName(for: UUID())
+        activity.monitoredActivityNames.insert(orphan)
+        activity.monitoredActivityNames.insert(SharedConstants.usageLimitsActivityName)
+
+        service.registerAll([makeSchedule()], screenTimeService: FakeScreenTimeService())
+
+        #expect(activity.stopCalls.contains([DeviceActivityName(orphan)]))
+        #expect(activity.monitoredActivityNames.contains(SharedConstants.usageLimitsActivityName))
+    }
+
+    @Test func heartbeatRunsWhileAnyScheduleIsEnabled() throws {
+        let (service, activity, _) = makeService()
+        let schedule = makeSchedule()
+
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+        #expect(activity.registeredSchedules[heartbeatName] == DeviceActivityScheduleFactory.heartbeat())
+
+        try service.toggleEnabled(schedule, allSchedules: [schedule], screenTimeService: FakeScreenTimeService())
+        #expect(activity.registeredSchedules[heartbeatName] == nil)
+    }
+
+    @Test func heartbeatIsNotRestartedWhenAlreadyRunning() {
+        let (service, activity, _) = makeService()
+        let schedule = makeSchedule()
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+        activity.startCalls.removeAll()
+
+        service.registerAll([schedule], screenTimeService: FakeScreenTimeService())
+
+        #expect(!activity.startCalls.map(\.name.rawValue).contains(heartbeatName))
+    }
+
+    @Test func heartbeatStaysWhileATimedUnblockIsActiveEvenWithoutSchedules() throws {
+        let (service, activity, store) = makeService()
+        store.timedUnblocks = try [TimedUnblockDTO(
             id: TimedUnblockService.mainID,
             selectionData: FamilyActivitySelection().toData(),
-            endDate: .now.addingTimeInterval(.hours(1)),
+            endDate: Date(timeIntervalSinceReferenceDate: 800_000_000).addingTimeInterval(3600),
             activityName: SharedConstants.mainTimedUnblockActivityName,
             isGroupUnblock: false
-        )
-    }
-
-    @Test func activeScheduleBlocksWhenNoUnblockInEffect() throws {
-        let (service, _, _) = makeService()
-        let screenTime = FakeScreenTimeService()
-
-        try service.sync(activeNowSchedule(), screenTimeService: screenTime)
-
-        #expect(screenTime.addToShieldsCalled, "An active block schedule applies when nothing overrides it")
-    }
-
-    @Test func activeScheduleSuppressedDuringTimedUnblock() throws {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        store.timedUnblocks = [activeMainUnblock()]
-
-        try service.sync(activeNowSchedule(), screenTimeService: screenTime)
-
-        #expect(!screenTime.addToShieldsCalled, "A live timed unblock-all must override schedule blocking")
-    }
-
-    @Test func activeScheduleSuppressedDuringPermanentOverride() throws {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        store.setScheduleOverrideActive(true)
-
-        try service.sync(activeNowSchedule(), screenTimeService: screenTime)
-
-        #expect(!screenTime.addToShieldsCalled, "A permanent unblock-all override must suppress schedule blocking")
-    }
-
-    @Test func reapplyDoesNotConsumePermanentOverride() throws {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        store.setScheduleOverrideActive(true)
-
-        try service.sync(activeNowSchedule(), screenTimeService: screenTime)
-
-        #expect(store.isScheduleOverrideActive(),
-                "Foreground re-application must not consume the override; only a fresh start does")
-    }
-
-    @Test func overrideSetBeforeWindowStartedDoesNotSuppressIt() throws {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        store.scheduleOverrideActive = true
-        store.scheduleOverrideSince = .now.addingTimeInterval(-.hours(3))
-
-        try service.sync(activeNowSchedule(), screenTimeService: screenTime)
-
-        #expect(screenTime.addToShieldsCalled)
-    }
-
-    @Test func legacyOverrideWithoutTimestampSuppressesActiveSchedule() throws {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        store.scheduleOverrideActive = true
-
-        try service.sync(activeNowSchedule(), screenTimeService: screenTime)
-
-        #expect(!screenTime.addToShieldsCalled)
-        #expect(store.isScheduleOverrideActive())
-    }
-
-    @Test func activeScheduleLeavesActiveGroupUnblockAppsUnblocked() throws {
-        let (service, _, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        store.customDomainsEnabled = true
-        store.timedUnblocks = try [TimedUnblockDTO(
-            id: UUID().uuidString,
-            selectionData: TokenFixtures.selection(apps: [2]).toData(),
-            endDate: .now.addingTimeInterval(.hours(1)),
-            activityName: "timedUnblock_group",
-            isGroupUnblock: true,
-            customDomains: ["b.com"]
         )]
-        let schedule = activeNowSchedule()
-        schedule.selection = TokenFixtures.selection(apps: [1, 2])
-        schedule.customDomains = ["a.com", "b.com"]
 
-        try service.sync(schedule, screenTimeService: screenTime)
+        service.registerAll([], screenTimeService: FakeScreenTimeService())
 
-        #expect(screenTime.addToShieldsSelection?.applicationTokens == [TokenFixtures.app(1)])
-        #expect(screenTime.addToShieldsCustomDomains == ["a.com"])
+        #expect(activity.registeredSchedules[heartbeatName] != nil)
     }
 
-    @Test func setScheduleOverrideWritesFlag() {
-        let (service, _, store) = makeService()
+    @Test func heartbeatGetsTheLastFreeActivitySlotBeforeSchedules() {
+        let (service, activity, _) = makeService()
+        activity.activityLimit = 1
 
-        service.setScheduleOverride(true)
-        #expect(store.isScheduleOverrideActive())
+        service.registerAll([makeSchedule(), makeSchedule()], screenTimeService: FakeScreenTimeService())
 
-        service.setScheduleOverride(false)
-        #expect(!store.isScheduleOverrideActive())
+        #expect(activity.monitoredActivityNames == [heartbeatName])
     }
 
-    @Test func disableAllTogglesEveryScheduleOff() {
-        let (service, _, _) = makeService()
+    @Test func tooManyActivitiesBecomesAReadableError() {
+        let (service, activity, _) = makeService()
+        activity.startError = DeviceActivityCenter.MonitoringError.excessiveActivities
+
+        #expect(throws: ScheduleRegistrationError.tooManyActivities) { try service.sync(makeSchedule()) }
+        #expect(ScheduleRegistrationError.tooManyActivities.errorDescription?.contains("20") == true)
+    }
+
+    @Test func sameWindowIgnoresAMissingSecondsComponent() {
+        let registered = DeviceActivitySchedule(
+            intervalStart: DateComponents(hour: 9, minute: 0),
+            intervalEnd: DateComponents(hour: 10, minute: 0),
+            repeats: true
+        )
+        let desired = DeviceActivitySchedule(
+            intervalStart: DateComponents(hour: 9, minute: 0, second: 0),
+            intervalEnd: DateComponents(hour: 10, minute: 0, second: 0),
+            repeats: true
+        )
+        #expect(registered.hasSameWindow(as: desired))
+        #expect(!registered.hasSameWindow(as: DeviceActivitySchedule(
+            intervalStart: desired.intervalStart, intervalEnd: desired.intervalEnd, repeats: false
+        )))
+    }
+
+    @Test func disableAllTogglesEverySchedulePersistsAndReconciles() {
+        let (service, activity, store) = makeService()
         let screenTime = FakeScreenTimeService()
         let first = makeSchedule(isEnabled: true)
         let second = makeSchedule(isEnabled: true)
@@ -247,19 +304,9 @@ struct ScheduleServiceTests {
 
         #expect(!first.isEnabled)
         #expect(!second.isEnabled)
-    }
-
-    @Test func disableAllStopsMonitoringAndLiftsBlocks() {
-        let (service, activity, store) = makeService()
-        let screenTime = FakeScreenTimeService()
-        let schedule = makeSchedule(shouldBlock: true, isEnabled: true)
-
-        service.disableAll([schedule], screenTimeService: screenTime)
-
-        #expect(activity.startCalls.isEmpty, "Disabled schedules are not monitored")
-        #expect(!activity.stopCalls.isEmpty, "Monitoring is stopped for the disabled schedule")
-        #expect(screenTime.removeFromShieldsCalled, "A blocking schedule's shield is lifted when disabled")
-        #expect(store.schedules.count == 1, "The disabled schedule is still persisted to the shared store")
+        #expect(activity.startCalls.isEmpty)
+        #expect(store.schedules.allSatisfy { $0.isEnabled == false })
+        #expect(screenTime.reconcileCallCount == 1)
     }
 
     // MARK: - isActive(at:)
@@ -334,44 +381,6 @@ struct ScheduleServiceTests {
                 "Inactive before the start")
     }
 
-    private func activeDomainSchedule() -> BlockSchedule {
-        let schedule = activeNowSchedule(shouldBlock: true)
-        schedule.customDomains = ["reddit.com"]
-        return schedule
-    }
-
-    @Test func activeScheduleOmitsDomainsWhenFeatureDisabled() throws {
-        let (service, _, _) = makeService() // FakeSharedStore defaults customDomainsEnabled = false
-        let screenTime = FakeScreenTimeService()
-
-        try service.sync(activeDomainSchedule(), screenTimeService: screenTime)
-
-        #expect(screenTime.addToShieldsCalled)
-        #expect(screenTime.addToShieldsCustomDomains == [], "Domains must not enforce while the setting is off")
-    }
-
-    @Test func activeScheduleAppliesDomainsWhenFeatureEnabled() throws {
-        let (service, _, store) = makeService()
-        store.setCustomDomainsEnabled(true)
-        let screenTime = FakeScreenTimeService()
-
-        try service.sync(activeDomainSchedule(), screenTimeService: screenTime)
-
-        #expect(screenTime.addToShieldsCustomDomains == ["reddit.com"])
-    }
-
-    @Test func disabledBlockingScheduleOmitsDomainsWhenFeatureDisabled() throws {
-        let (service, _, _) = makeService()
-        let screenTime = FakeScreenTimeService()
-        let schedule = activeDomainSchedule()
-        schedule.isEnabled = false
-
-        try service.sync(schedule, screenTimeService: screenTime)
-
-        #expect(screenTime.removeFromShieldsCalled)
-        #expect(screenTime.removeFromShieldsCustomDomains == [])
-    }
-
     @Test func mirrorCustomDomainsEnabledWritesFlag() {
         let (service, _, store) = makeService()
 
@@ -399,7 +408,7 @@ struct ScheduleServiceTests {
             isTimed: isTimed,
             isEnabled: true
         )
-        try service.sync(schedule, screenTimeService: FakeScreenTimeService())
+        try service.sync(schedule)
         return try #require(activity.startCalls.last?.schedule)
     }
 

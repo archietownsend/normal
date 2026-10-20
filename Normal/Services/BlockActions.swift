@@ -5,16 +5,14 @@ enum BlockActions {
         mainSelection: SelectedApps,
         settings: Settings,
         screenTimeService: any ScreenTimeProviding,
-        timedUnblockService: TimedUnblockService,
-        scheduleService: ScheduleService
+        timedUnblockService: TimedUnblockService
     ) {
-        screenTimeService.applyShieldOnAll(
+        timedUnblockService.clearAll()
+        screenTimeService.blockAll(
             selection: mainSelection.selection,
             customDomains: settings.enableCustomDomains ? mainSelection.customDomains : [],
             blockAllPreventsAppDelete: settings.blockAllPreventsAppDelete
         )
-        timedUnblockService.clearAll()
-        scheduleService.setScheduleOverride(false)
     }
 
     static func blockGroup(
@@ -25,15 +23,9 @@ enum BlockActions {
     ) {
         let customDomains = settings.enableCustomDomains ? group.customDomains : []
         if timedUnblockService.isGroupUnblockActive(groupId: group.id) {
-            timedUnblockService.cancelGroup(
-                groupId: group.id,
-                selection: group.selection,
-                customDomains: customDomains,
-                screenTimeService: screenTimeService
-            )
-        } else {
-            screenTimeService.addToShields(selection: group.selection, customDomains: customDomains)
+            timedUnblockService.cancelGroup(groupId: group.id)
         }
+        screenTimeService.block(selection: group.selection, customDomains: customDomains)
     }
 
     static func emergencyUnblock(
@@ -45,7 +37,6 @@ enum BlockActions {
     ) {
         timedUnblockService.discardAll()
         scheduleService.disableAll(schedules, screenTimeService: screenTimeService)
-        scheduleService.setScheduleOverride(false)
         usageLimitService.overrideToday()
         screenTimeService.removeAllRestrictions()
     }

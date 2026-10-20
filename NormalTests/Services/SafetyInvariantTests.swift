@@ -38,49 +38,12 @@ struct SafetyInvariantTests {
         }
     }
 
-    private func makeTimedUnblock() -> TimedUnblockService {
-        TimedUnblockService(
-            activityCenter: FakeDeviceActivityCenter(),
-            sharedStore: FakeSharedStore(),
-            onExpiration: {}
-        )
-    }
-
-    @Test func appStaysDeletableWheneverNothingIsBlocked_consistentFlags() throws {
-        let spy = StatefulScreenTimeSpy()
-        let service = makeTimedUnblock()
-        let selection = FamilyActivitySelection()
-
-        spy.applyShieldOnAll(selection: selection, blockAllPreventsAppDelete: true)
-        #expect(!spy.invariantViolated)
-
-        try service.startMain(
-            duration: .fifteenMinutes,
-            selection: selection,
-            screenTimeService: spy,
-            blockAllPreventsAppDelete: true
-        )
-        #expect(!spy.invariantViolated)
-        #expect(!spy.appDeleteDisabled)
-
-        service.cancelMain(
-            selection: selection,
-            screenTimeService: spy,
-            blockAllPreventsAppDelete: true
-        )
-        #expect(!spy.invariantViolated)
-
-        spy.removeShieldOnAll(blockAllPreventsAppDelete: true)
-        #expect(!spy.invariantViolated)
-        #expect(!spy.appDeleteDisabled)
-    }
-
     @Test func mismatchedPreventDeleteFlagsStrandTheEscapeHatch() {
         let spy = StatefulScreenTimeSpy()
         let selection = FamilyActivitySelection()
 
-        spy.applyShieldOnAll(selection: selection, blockAllPreventsAppDelete: true)
-        spy.removeShieldOnAll(blockAllPreventsAppDelete: false)
+        spy.blockAll(selection: selection, blockAllPreventsAppDelete: true)
+        spy.unblockAll(blockAllPreventsAppDelete: false)
 
         #expect(spy.invariantViolated)
     }
