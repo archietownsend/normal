@@ -97,8 +97,9 @@ struct ShieldReconcilerTests {
         #expect(store.manualBlockState?.applications.blockedTokens == [TokenFixtures.app(4)])
     }
 
-    @Test(.enabled(if: FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedConstants.appGroupID) != nil))
-    func concurrentReconcilesNeverOverlap() async {
+    @Test func concurrentReconcilesNeverOverlap() async {
+        let lockURL = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).lock")
+        defer { try? FileManager.default.removeItem(at: lockURL) }
         let store = FakeSharedStore()
         store.manualBlockState = ManualBlockState()
         let shields = RecordingShields()
@@ -107,7 +108,7 @@ struct ShieldReconcilerTests {
         await withTaskGroup(of: Void.self) { group in
             for id in UInt8(1) ... 8 {
                 group.addTask {
-                    ShieldReconciler.reconcile(sharedStore: store, shields: shields, monitoredActivities: []) {
+                    ShieldReconciler.reconcile(sharedStore: store, shields: shields, monitoredActivities: [], lockURL: lockURL) {
                         $0.block(TokenFixtures.selection(apps: [id]), customDomains: [], at: .now)
                     }
                 }
