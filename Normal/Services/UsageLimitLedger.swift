@@ -10,13 +10,15 @@ struct KeychainUsageLimitLedger: UsageLimitLedger {
         let lastLoosened: Date
     }
 
-    private let item: KeychainItem
+    private let item: any KeychainStoring
 
     init(
-        service: String = "com.normalengineering.normal.usageLimits",
-        account: String = "lastLoosened"
+        item: any KeychainStoring = KeychainItem(
+            service: "com.normalengineering.normal.usageLimits",
+            account: "lastLoosened"
+        )
     ) {
-        item = KeychainItem(service: service, account: account)
+        self.item = item
     }
 
     func loadLastLoosened() -> Date? {
