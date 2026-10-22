@@ -522,4 +522,22 @@ struct BlockingScenarioTests {
         #expect(h.shields.currentShields().categories == [TokenFixtures.category(1), TokenFixtures.category(2)])
         #expect(h.shields.currentShields().webDomains == [TokenFixtures.webDomain(3)])
     }
+
+    @Test func backToBackBlockSchedulesHandOverAtTheSameMinute() throws {
+        let h = BlockingHarness(mainApps: Array(1 ... 10), startingAt: 20)
+        let weekday = { Calendar.current.component(.weekday, from: h.at(12, dayOffset: $0)) }
+        try h.addSchedule(Array(1 ... 10), from: (21, 0), minutes: 480, block: true, weekdays: [weekday(0), weekday(1)])
+        try h.addSchedule(Array(3 ... 10), from: (5, 0), minutes: 720, block: true, weekdays: [weekday(1)])
+
+        h.wake(at: h.at(21, 30))
+        #expect(h.blocked == Set((1 ... 10).map(TokenFixtures.app)))
+        h.wake(at: h.at(5, 0, dayOffset: 1))
+        #expect(h.blocked == Set((3 ... 10).map(TokenFixtures.app)))
+        h.wake(at: h.at(12, 44, dayOffset: 1))
+        #expect(h.blocked == Set((3 ... 10).map(TokenFixtures.app)))
+        h.wake(at: h.at(17, 30, dayOffset: 1))
+        #expect(h.blocked.isEmpty)
+        h.wake(at: h.at(21, 30, dayOffset: 1))
+        #expect(h.blocked == Set((1 ... 10).map(TokenFixtures.app)))
+    }
 }
