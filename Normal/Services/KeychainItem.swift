@@ -52,7 +52,10 @@ extension KeychainItem {
     func save(_ value: some Encodable) {
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
-        guard let data = try? encoder.encode(value) else { return }
-        saveData(data)
+        do {
+            try saveData(encoder.encode(value))
+        } catch {
+            assertionFailure("Keychain value failed to encode: \(error)")
+        }
     }
 }

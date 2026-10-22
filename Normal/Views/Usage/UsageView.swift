@@ -14,7 +14,8 @@ struct UsageView: View {
     }
 
     var body: some View {
-        TimelineView(UsageLockSchedule(dates: limits.flatMap(\.lockRefreshDates))) { context in
+        let lockDates = limits.flatMap(\.lockRefreshDates) + usageLimitService.resetLockRefreshDates()
+        TimelineView(UsageLockSchedule(dates: lockDates)) { context in
             List {
                 noticeSection
                 if limits.isEmpty {
@@ -22,7 +23,7 @@ struct UsageView: View {
                 } else {
                     limitsSection(now: context.date)
                 }
-                resetSection
+                resetSection(now: context.date)
             }
         }
         .navigationTitle("Max Daily Limits")
@@ -65,13 +66,19 @@ struct UsageView: View {
         }
     }
 
-    private var resetSection: some View {
+    private func resetSection(now: Date) -> some View {
         Section {
             NavigationLink {
                 UsageResetTimeView(currentMinutes: settings.dailyLimitResetMinutes)
             } label: {
-                LabeledContent("Resets At") {
-                    Text(usageLimitService.nextReset(), style: .time)
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    LabeledContent("Resets At") {
+                        Text(usageLimitService.nextReset(), style: .time)
+                    }
+                    if !limits.isEmpty, case let .grace(until) = usageLimitService.resetLockState(now: now) {
+                        UsageGraceCountdown(until: until, now: now)
+                            .accessibilityIdentifier("usage.resetGraceCountdown")
+                    }
                 }
             }
             .accessibilityIdentifier("usage.resetTime")
