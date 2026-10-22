@@ -427,4 +427,20 @@ struct UsageLimitServiceTests {
         #expect(h.service.decideResetChange(now: stored + .days(2)) == .locked(until: stored + .days(7)))
         #expect(h.service.decideResetChange(now: stored + .days(7)) == .allowed(.cooldownElapsed))
     }
+
+    @Test func theKeychainLedgerSurvivesARelaunch() {
+        let service = "com.normalengineering.normal.tests.\(UUID().uuidString)"
+        let stored = Date(timeIntervalSinceReferenceDate: 500_000)
+        KeychainUsageLimitLedger(service: service).saveLastLoosened(stored)
+        defer { KeychainUsageLimitLedger(service: service).saveLastLoosened(nil) }
+
+        let relaunched = UsageLimitService(
+            activityCenter: FakeDeviceActivityCenter(),
+            sharedStore: FakeSharedStore(),
+            ledger: KeychainUsageLimitLedger(service: service),
+            limitShield: InMemoryDailyLimitShield()
+        )
+
+        #expect(relaunched.decideResetChange(now: stored + .days(2)) == .locked(until: stored + .days(7)))
+    }
 }

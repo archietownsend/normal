@@ -21,3 +21,17 @@ enum UsageLockDeadline {
             .monospacedDigit()
     }
 }
+
+struct UsageGraceCountdown: View {
+    let until: Date
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: DS.Spacing.xs) {
+            Image(systemName: "pencil")
+            Text("\(UsageLockDeadline.countdown(to: until, now: now)) left to adjust")
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.orange)
+    }
+}

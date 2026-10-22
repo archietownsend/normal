@@ -6,6 +6,10 @@ nonisolated protocol UsageLimitLedger: Sendable {
 }
 
 struct KeychainUsageLimitLedger: UsageLimitLedger {
+    private struct Record: Codable {
+        let lastLoosened: Date
+    }
+
     private let item: KeychainItem
 
     init(
@@ -16,7 +20,7 @@ struct KeychainUsageLimitLedger: UsageLimitLedger {
     }
 
     func loadLastLoosened() -> Date? {
-        item.load(Double.self).map(Date.init(timeIntervalSinceReferenceDate:))
+        item.load(Record.self)?.lastLoosened
     }
 
     func saveLastLoosened(_ date: Date?) {
@@ -24,7 +28,7 @@ struct KeychainUsageLimitLedger: UsageLimitLedger {
             item.delete()
             return
         }
-        item.save(date.timeIntervalSinceReferenceDate)
+        item.save(Record(lastLoosened: date))
     }
 }
 

@@ -16,13 +16,8 @@ struct UsageLimitRow: View {
                     .foregroundStyle(.secondary)
                 StatusBadge(title: state.label, systemImage: state.icon, tint: state.color)
                 if case let .grace(until) = limit.lockState(now: now) {
-                    HStack(spacing: DS.Spacing.xs) {
-                        Image(systemName: "pencil")
-                        Text("\(UsageLockDeadline.countdown(to: until, now: now)) left to adjust")
-                    }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.orange)
-                    .accessibilityIdentifier("usage.graceCountdown")
+                    UsageGraceCountdown(until: until, now: now)
+                        .accessibilityIdentifier("usage.graceCountdown")
                 }
             }
             Spacer(minLength: DS.Spacing.sm)
