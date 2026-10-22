@@ -1,11 +1,17 @@
 import Foundation
 import Security
 
+nonisolated protocol KeychainStoring: Sendable {
+    func loadData() -> Data?
+    func saveData(_ data: Data)
+    func delete()
+}
+
 /// A single generic-password slot in the Keychain.
 ///
 /// Used for counters that must survive a delete-and-reinstall — the whole point
 /// of storing them outside the app container.
-struct KeychainItem: Sendable {
+struct KeychainItem: KeychainStoring {
     let service: String
     let account: String
 
@@ -43,7 +49,7 @@ struct KeychainItem: Sendable {
     }
 }
 
-extension KeychainItem {
+extension KeychainStoring {
     func load<T: Decodable>(_ type: T.Type) -> T? {
         guard let data = loadData() else { return nil }
         return try? PropertyListDecoder().decode(type, from: data)

@@ -429,18 +429,34 @@ struct UsageLimitServiceTests {
     }
 
     @Test func theKeychainLedgerSurvivesARelaunch() {
-        let service = "com.normalengineering.normal.tests.\(UUID().uuidString)"
+        let item = InMemoryKeychainItem()
         let stored = Date(timeIntervalSinceReferenceDate: 500_000)
-        KeychainUsageLimitLedger(service: service).saveLastLoosened(stored)
-        defer { KeychainUsageLimitLedger(service: service).saveLastLoosened(nil) }
+        KeychainUsageLimitLedger(item: item).saveLastLoosened(stored)
 
         let relaunched = UsageLimitService(
             activityCenter: FakeDeviceActivityCenter(),
             sharedStore: FakeSharedStore(),
-            ledger: KeychainUsageLimitLedger(service: service),
+            ledger: KeychainUsageLimitLedger(item: item),
             limitShield: InMemoryDailyLimitShield()
         )
 
         #expect(relaunched.decideResetChange(now: stored + .days(2)) == .locked(until: stored + .days(7)))
+    }
+}
+
+private final class InMemoryKeychainItem: KeychainStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var data: Data?
+
+    func loadData() -> Data? {
+        lock.withLock { data }
+    }
+
+    func saveData(_ data: Data) {
+        lock.withLock { self.data = data }
+    }
+
+    func delete() {
+        lock.withLock { data = nil }
     }
 }
