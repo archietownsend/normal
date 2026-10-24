@@ -46,22 +46,19 @@ struct GeneralSettingsView: View {
         }
     }
 
-    private var isBlocking: Bool {
-        screenTimeService.activeShieldCount() > 0
-    }
-
     private var adultContentSection: some View {
-        Section {
+        let isLocked = settings.blockAdultContent && screenTimeService.activeShieldCount() > 0
+        return Section {
             Toggle(
                 "Block Adult Websites",
                 isOn: Bindable(settings).blockAdultContent
             )
-            .disabled(settings.blockAdultContent && isBlocking)
+            .disabled(isLocked)
             .accessibilityIdentifier("settings.blockAdultContentToggle")
         } header: {
             Text("Adult Content")
         } footer: {
-            Text(settings.blockAdultContent && isBlocking
+            Text(isLocked
                 ? "Adult websites are currently being blocked. Unblock all apps before disabling this setting."
                 : "Uses Apple's web content filter to block adult websites in Safari and other apps. Stays on at all times, not just while blocking.")
         }

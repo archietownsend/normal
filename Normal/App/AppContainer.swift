@@ -15,8 +15,6 @@ struct AppContainer: View {
     @State private var emergencyUnblockService: EmergencyUnblockService
     @State private var donationService = DonationService()
     @State private var usageLimitService: UsageLimitService
-    private let adultContentFilter: any AdultContentFiltering =
-        UITestSupport.isActive ? InMemoryAdultContentFilter() : ManagedSettingsAdultContentFilter()
 
     init(services: AppServices) {
         _screenTimeService = State(initialValue: services.screenTime)
@@ -43,14 +41,17 @@ struct AppContainer: View {
             .environment(usageLimitService)
             .task {
                 mirrorCustomDomainsEnabled()
-                adultContentFilter.setEnabled(allSettings.first?.blockAdultContent ?? false)
+                if let enabled = allSettings.first?.blockAdultContent {
+                    screenTimeService.setAdultContentBlocked(enabled)
+                }
             }
             .onChange(of: allSettings.first?.enableCustomDomains ?? false) { _, enabled in
                 scheduleService.mirrorCustomDomainsEnabled(enabled)
                 screenTimeService.reconcile()
             }
-            .onChange(of: allSettings.first?.blockAdultContent ?? false) { _, enabled in
-                adultContentFilter.setEnabled(enabled)
+            .onChange(of: allSettings.first?.blockAdultContent) { _, enabled in
+                guard let enabled else { return }
+                screenTimeService.setAdultContentBlocked(enabled)
             }
     }
 
