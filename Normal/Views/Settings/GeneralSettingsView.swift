@@ -15,6 +15,7 @@ struct GeneralSettingsView: View {
             blockingSection
             UsageSummaryView()
             customDomainsSection
+            adultContentSection
             appearanceSection
             aboutSection
             #if DEBUG
@@ -42,6 +43,27 @@ struct GeneralSettingsView: View {
             Text(hasActiveFilter
                 ? "Custom domains are currently being blocked. Unblock all apps before disabling this setting."
                 : "Adds a section to App Select, allowing you to type custom website domains to block.")
+        }
+    }
+
+    private var isBlocking: Bool {
+        screenTimeService.activeShieldCount() > 0
+    }
+
+    private var adultContentSection: some View {
+        Section {
+            Toggle(
+                "Block Adult Websites",
+                isOn: Bindable(settings).blockAdultContent
+            )
+            .disabled(settings.blockAdultContent && isBlocking)
+            .accessibilityIdentifier("settings.blockAdultContentToggle")
+        } header: {
+            Text("Adult Content")
+        } footer: {
+            Text(settings.blockAdultContent && isBlocking
+                ? "Adult websites are currently being blocked. Unblock all apps before disabling this setting."
+                : "Uses Apple's web content filter to block adult websites in Safari and other apps. Stays on at all times, not just while blocking.")
         }
     }
 
