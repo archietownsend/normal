@@ -47,6 +47,41 @@ struct ScreenTimeServiceTests {
         #expect(service.isAppDeleteDisabled)
     }
 
+    @Test func adultContentFilterFollowsTheSetting() {
+        let (service, shields) = makeService()
+        service.setAdultContentBlocked(true)
+        #expect(shields.currentShields().blocksAdultContent)
+        #expect(service.isAdultContentBlocked)
+        service.setAdultContentBlocked(false)
+        #expect(!shields.currentShields().blocksAdultContent)
+        #expect(!service.isAdultContentBlocked)
+    }
+
+    @Test func adultContentFilterIsIndependentOfBlockAll() {
+        let (service, shields) = makeService()
+        service.setAdultContentBlocked(true)
+        #expect(service.activeShieldCount() == 0)
+
+        service.blockAll(selection: TokenFixtures.selection(apps: [1]), blockAllPreventsAppDelete: true)
+        service.unblockAll(blockAllPreventsAppDelete: true)
+
+        #expect(shields.currentShields().blocksAdultContent)
+        #expect(service.activeShieldCount() == 0)
+    }
+
+    @Test func removeAllRestrictionsLiftsAdultContentFilter() {
+        let (service, shields) = makeService()
+        service.setAdultContentBlocked(true)
+        service.blockAll(selection: TokenFixtures.selection(apps: [1]), blockAllPreventsAppDelete: true)
+
+        service.removeAllRestrictions()
+        service.reconcile()
+
+        #expect(shields.currentShields().applications.isEmpty)
+        #expect(!service.isAppDeleteDisabled)
+        #expect(!shields.currentShields().blocksAdultContent)
+    }
+
     @Test func blockStatusReflectsTheReconciledShield() {
         let (service, _) = makeService()
         service.blockAll(selection: TokenFixtures.selection(apps: [1, 2]), blockAllPreventsAppDelete: false)

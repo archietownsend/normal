@@ -15,6 +15,7 @@ struct GeneralSettingsView: View {
             blockingSection
             UsageSummaryView()
             customDomainsSection
+            AdultContentToggleView(defaultKeyType: settings.defaultKeyType)
             appearanceSection
             aboutSection
             #if DEBUG
