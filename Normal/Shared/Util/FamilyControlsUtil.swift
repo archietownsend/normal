@@ -23,6 +23,14 @@ extension FamilyActivitySelection {
         applicationTokens.count + webDomainTokens.count + categoryTokens.count
     }
 
+    func includingEntireCategory(_ include: Bool) -> FamilyActivitySelection {
+        var copy = FamilyActivitySelection(includeEntireCategory: include)
+        copy.applicationTokens = applicationTokens
+        copy.webDomainTokens = webDomainTokens
+        copy.categoryTokens = categoryTokens
+        return copy
+    }
+
     var selectedTokenCounts: String {
         Self.selectedTokenCounts(
             apps: applicationTokens.count,

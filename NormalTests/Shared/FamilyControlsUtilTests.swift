@@ -4,6 +4,18 @@ import Foundation
 import Testing
 
 struct FamilyControlsUtilTests {
+    @Test func includingEntireCategoryKeepsEveryToken() {
+        let original = TokenFixtures.selection(apps: [1, 2], categories: [3], webDomains: [4])
+
+        let expanded = original.includingEntireCategory(true)
+
+        #expect(expanded.includeEntireCategory)
+        #expect(expanded.applicationTokens == original.applicationTokens)
+        #expect(expanded.categoryTokens == original.categoryTokens)
+        #expect(expanded.webDomainTokens == original.webDomainTokens)
+        #expect(!expanded.includingEntireCategory(false).includeEntireCategory)
+    }
+
     @Test func emptySelectionIsEmpty() {
         #expect(FamilyActivitySelection().isEmpty)
     }
