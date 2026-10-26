@@ -76,6 +76,22 @@ struct SharedStore: SharedStoreProviding, Sendable {
         defaults.set(enabled, forKey: SharedConstants.DefaultsKey.adultContentEnabled)
     }
 
+    func isAppInstallBlockingEnabled() -> Bool {
+        defaults.bool(forKey: SharedConstants.DefaultsKey.appInstallsBlocked)
+    }
+
+    func setAppInstallBlockingEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: SharedConstants.DefaultsKey.appInstallsBlocked)
+    }
+
+    func isHideBlockedAppsEnabled() -> Bool {
+        defaults.bool(forKey: SharedConstants.DefaultsKey.hideBlockedApps)
+    }
+
+    func setHideBlockedAppsEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: SharedConstants.DefaultsKey.hideBlockedApps)
+    }
+
     func saveUsageLimits(_ limits: [UsageLimitDTO]) {
         let data = try? PropertyListEncoder().encode(limits)
         defaults.set(data, forKey: SharedConstants.DefaultsKey.usageLimits)

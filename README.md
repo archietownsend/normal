@@ -27,6 +27,10 @@ Temporary unlock durations with automatic re-blocking when time expires.
 
 Block adult websites across Safari and other apps using Apple's built-in web content filter.
 
+### Hide Blocked Apps & Block App Installs
+
+Optionally hide blocked apps from the Home Screen and App Library, and stop new apps being installed so deleted apps can't be downloaded again.
+
 ### Automated Schedules
 
 Establish recurring blocking patterns for specific days and times — block email in the evenings, social media on weekdays, and more.

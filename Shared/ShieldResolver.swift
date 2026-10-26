@@ -107,6 +107,8 @@ nonisolated struct ShieldPlan: Equatable {
     var categories: Set<ActivityCategoryToken> = []
     var customDomains: Set<String> = []
     var blocksAdultContent = false
+    var blocksAppInstalls = false
+    var hiddenApplications: Set<ApplicationToken> = []
     var denyAppRemoval: Bool?
 
     var selection: FamilyActivitySelection {
@@ -143,6 +145,8 @@ nonisolated enum ShieldResolver {
         timedUnblocks: [TimedUnblockDTO],
         customDomainsEnabled: Bool,
         adultContentEnabled: Bool = false,
+        appInstallsBlocked: Bool = false,
+        hidesBlockedApps: Bool = false,
         at date: Date,
         calendar: Calendar = .current
     ) -> ShieldPlan {
@@ -159,6 +163,10 @@ nonisolated enum ShieldResolver {
             plan.customDomains = resolve(manual.customDomains, claims, \.customDomains)
         }
         plan.blocksAdultContent = adultContentEnabled
+        plan.blocksAppInstalls = appInstallsBlocked
+        if hidesBlockedApps {
+            plan.hiddenApplications = plan.applications
+        }
         plan.denyAppRemoval = appDeletionBlocked(manual: manual, timedUnblocks: timedUnblocks, at: date)
         return plan
     }
