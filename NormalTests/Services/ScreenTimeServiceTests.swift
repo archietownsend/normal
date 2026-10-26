@@ -82,38 +82,6 @@ struct ScreenTimeServiceTests {
         #expect(!shields.currentShields().blocksAdultContent)
     }
 
-    @Test func appInstallBlockingFollowsTheSetting() {
-        let (service, shields) = makeService()
-        service.setAppInstallBlocked(true)
-        #expect(shields.currentShields().blocksAppInstalls)
-        #expect(service.isAppInstallBlocked)
-        service.setAppInstallBlocked(false)
-        #expect(!shields.currentShields().blocksAppInstalls)
-        #expect(!service.isAppInstallBlocked)
-    }
-
-    @Test func appInstallBlockingIsIndependentOfBlockAll() {
-        let (service, shields) = makeService()
-        service.setAppInstallBlocked(true)
-
-        service.blockAll(selection: TokenFixtures.selection(apps: [1]), blockAllPreventsAppDelete: true)
-        service.unblockAll(blockAllPreventsAppDelete: true)
-
-        #expect(shields.currentShields().blocksAppInstalls)
-        #expect(service.activeShieldCount() == 0)
-    }
-
-    @Test func removeAllRestrictionsLiftsAppInstallBlocking() {
-        let (service, shields) = makeService()
-        service.setAppInstallBlocked(true)
-
-        service.removeAllRestrictions()
-        service.reconcile()
-
-        #expect(!shields.currentShields().blocksAppInstalls)
-        #expect(!service.isAppInstallBlocked)
-    }
-
     @Test func hidingBlockedAppsFollowsTheBlockedApps() {
         let (service, shields) = makeService()
         service.setHidingBlockedApps(true)

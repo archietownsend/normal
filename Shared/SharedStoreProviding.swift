@@ -14,8 +14,6 @@ nonisolated protocol SharedStoreProviding: Sendable {
     func setCustomDomainsEnabled(_ enabled: Bool)
     func isAdultContentEnabled() -> Bool
     func setAdultContentEnabled(_ enabled: Bool)
-    func isAppInstallBlockingEnabled() -> Bool
-    func setAppInstallBlockingEnabled(_ enabled: Bool)
     func isHideBlockedAppsEnabled() -> Bool
     func setHideBlockedAppsEnabled(_ enabled: Bool)
     func saveUsageLimits(_ limits: [UsageLimitDTO])

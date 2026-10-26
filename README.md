@@ -27,9 +27,9 @@ Temporary unlock durations with automatic re-blocking when time expires.
 
 Block adult websites across Safari and other apps using Apple's built-in web content filter.
 
-### Hide Blocked Apps & Block App Installs
+### Hide Blocked Apps
 
-Optionally hide blocked apps from the Home Screen and App Library, and stop new apps being installed so deleted apps can't be downloaded again.
+Optionally hide blocked apps from the Home Screen, App Library and Search until they're unblocked.
 
 ### Automated Schedules
 

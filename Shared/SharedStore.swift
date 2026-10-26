@@ -76,14 +76,6 @@ struct SharedStore: SharedStoreProviding, Sendable {
         defaults.set(enabled, forKey: SharedConstants.DefaultsKey.adultContentEnabled)
     }
 
-    func isAppInstallBlockingEnabled() -> Bool {
-        defaults.bool(forKey: SharedConstants.DefaultsKey.appInstallsBlocked)
-    }
-
-    func setAppInstallBlockingEnabled(_ enabled: Bool) {
-        defaults.set(enabled, forKey: SharedConstants.DefaultsKey.appInstallsBlocked)
-    }
-
     func isHideBlockedAppsEnabled() -> Bool {
         defaults.bool(forKey: SharedConstants.DefaultsKey.hideBlockedApps)
     }

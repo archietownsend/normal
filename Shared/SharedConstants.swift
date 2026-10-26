@@ -10,7 +10,6 @@ nonisolated enum SharedConstants {
         static let scheduleOverrideSince = "scheduleOverrideSince_v1"
         static let customDomainsEnabled = "customDomainsEnabled_v1"
         static let adultContentEnabled = "adultContentEnabled_v1"
-        static let appInstallsBlocked = "appInstallsBlocked_v1"
         static let hideBlockedApps = "hideBlockedApps_v1"
         static let widgetGroups = "widgetGroups_v1"
         static let widgetKeyTypes = "widgetKeyTypes_v1"
