@@ -89,7 +89,9 @@ struct AppSelectView: View {
             .settingsToolbar()
             .alert("Selection will affect your groups", isPresented: $showSelectionChangeAlert) {
                 Button("Cancel", role: .cancel) {}
-                Button("Continue", role: .destructive, action: presentPicker)
+                Button("Continue", role: .destructive) {
+                    isFamilyActivityPickerPresented = true
+                }
             } message: {
                 Text("Updating your app selection will affect the functionality of your groups. After updating selection please update your groups to ensure consistency.")
             }
@@ -108,16 +110,11 @@ struct AppSelectView: View {
     private func onUpdateSelectionButton() {
         screenTimeService.ifAuthorized {
             if appGroups.isEmpty {
-                presentPicker()
+                isFamilyActivityPickerPresented = true
             } else {
                 showSelectionChangeAlert = true
             }
         }
-    }
-
-    private func presentPicker() {
-        selection = selection.includingEntireCategory(screenTimeService.isHidingBlockedApps)
-        isFamilyActivityPickerPresented = true
     }
 
     private func persistSelection(_: FamilyActivitySelection, _ new: FamilyActivitySelection) {

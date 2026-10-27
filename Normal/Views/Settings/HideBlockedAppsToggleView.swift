@@ -17,7 +17,7 @@ struct HideBlockedAppsToggleView: View {
         } header: {
             Text("Hidden Apps")
         } footer: {
-            Text("Blocked apps are removed from the Home Screen, App Library and Search until they're unblocked. While on, categories chosen in App Select include each of their installed apps, so every app counts towards the 50 item limit. Update your selection after turning this on. Unhidden apps may return to the App Library rather than their original Home Screen position.")
+            Text("Individually selected apps are removed from the Home Screen, App Library and Search while blocked. Apps blocked through a category stay blocked but remain visible.")
         }
     }
 }

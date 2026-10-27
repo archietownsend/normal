@@ -29,7 +29,7 @@ Block adult websites across Safari and other apps using Apple's built-in web con
 
 ### Hide Blocked Apps
 
-Optionally hide blocked apps from the Home Screen, App Library and Search until they're unblocked.
+Optionally hide individually blocked apps from the Home Screen, App Library and Search until they're unblocked.
 
 ### Automated Schedules
 
