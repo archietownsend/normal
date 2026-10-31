@@ -144,7 +144,7 @@ nonisolated enum ShieldResolver {
         timedUnblocks: [TimedUnblockDTO],
         customDomainsEnabled: Bool,
         adultContentEnabled: Bool = false,
-        hidesBlockedApps: Bool = false,
+        hideBlockedAppsEnabled: Bool = false,
         at date: Date,
         calendar: Calendar = .current
     ) -> ShieldPlan {
@@ -161,7 +161,7 @@ nonisolated enum ShieldResolver {
             plan.customDomains = resolve(manual.customDomains, claims, \.customDomains)
         }
         plan.blocksAdultContent = adultContentEnabled
-        if hidesBlockedApps {
+        if hideBlockedAppsEnabled {
             plan.hiddenApplications = plan.applications
         }
         plan.denyAppRemoval = appDeletionBlocked(manual: manual, timedUnblocks: timedUnblocks, at: date)

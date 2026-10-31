@@ -17,7 +17,7 @@ struct HideBlockedAppsToggleView: View {
         } header: {
             Text("Hidden Apps")
         } footer: {
-            Text("Individually selected apps are removed from the Home Screen, App Library and Search while blocked. Apps blocked through a category stay blocked but remain visible.")
+            Text("Individually selected apps are removed from the Home Screen, App Library and Search while blocked. Apps blocked through a category or a daily limit stay blocked but remain visible. When unblocked, apps may reappear in the App Library rather than their original Home Screen spot.")
         }
     }
 }

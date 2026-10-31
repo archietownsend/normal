@@ -218,7 +218,7 @@ struct ShieldResolverTests {
             enabledSchedules: [],
             timedUnblocks: unblocks,
             customDomainsEnabled: true,
-            hidesBlockedApps: true,
+            hideBlockedAppsEnabled: true,
             at: date,
             calendar: cal
         ).hiddenApplications
@@ -247,7 +247,7 @@ struct ShieldResolverTests {
             enabledSchedules: [],
             timedUnblocks: [],
             customDomainsEnabled: true,
-            hidesBlockedApps: true,
+            hideBlockedAppsEnabled: true,
             at: at(12),
             calendar: cal
         )

@@ -65,7 +65,7 @@ nonisolated enum ShieldReconciler {
                 timedUnblocks: timedUnblocks,
                 customDomainsEnabled: sharedStore.isCustomDomainsEnabled(),
                 adultContentEnabled: sharedStore.isAdultContentEnabled(),
-                hidesBlockedApps: sharedStore.isHideBlockedAppsEnabled(),
+                hideBlockedAppsEnabled: sharedStore.isHideBlockedAppsEnabled(),
                 at: date
             )
             if plan.differs(from: current) {

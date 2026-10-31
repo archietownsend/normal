@@ -77,11 +77,11 @@ struct SharedStore: SharedStoreProviding, Sendable {
     }
 
     func isHideBlockedAppsEnabled() -> Bool {
-        defaults.bool(forKey: SharedConstants.DefaultsKey.hideBlockedApps)
+        defaults.bool(forKey: SharedConstants.DefaultsKey.hideBlockedAppsEnabled)
     }
 
     func setHideBlockedAppsEnabled(_ enabled: Bool) {
-        defaults.set(enabled, forKey: SharedConstants.DefaultsKey.hideBlockedApps)
+        defaults.set(enabled, forKey: SharedConstants.DefaultsKey.hideBlockedAppsEnabled)
     }
 
     func saveUsageLimits(_ limits: [UsageLimitDTO]) {
